@@ -21,3 +21,23 @@ static class XyzzyAgentClass : public TclClass {
 } class_xyzzyagent;
 
 
+XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY)
+{
+    bind("packetSize_", &size_);
+
+}
+
+void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
+
+}
+void XyzzyAgent::recv(Packet* pkt, Handler*) {
+
+}
+int XyzzyAgent::command(int argc, const char*const* argv) {
+
+    return 1;
+}
+
+
+
+/* vi: set tabstop=4, softtabstop=4, shiftwidth=4, expandtab */

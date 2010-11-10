@@ -30,10 +30,10 @@ class XyzzyAgent : public Agent {
         friend class CheckBufferTimer;
         XyzzyAgent();
         XyzzyAgent(packet_t);
+        virtual void sendmsg(int nbytes, AppData* data, const char *flags = 0);
         virtual void sendmsg(int nbytes, const char *flags = 0){
             sendmsg(nbytes, NULL, flags);
         }
-        virtual void sendmsg(int nbytes, AppData* data, const char *flags = 0);
         virtual void recv(Packet* pkt, Handler*);
         virtual int command(int argc, const char*const* argv);
     private:
