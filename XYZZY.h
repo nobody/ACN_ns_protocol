@@ -1,5 +1,5 @@
 #ifndef ns2_XYZZY_
-#define cs2_XYZZY_
+#define ns2_XYZZY_
 
 // PT_XYZZY must be added to common/packet.h packet_t enum and p_info class
 // Add "Agent/Xyzzy set packetSize_ 1024" to tcl/lib/ns-default.tcl
@@ -8,16 +8,21 @@
 
 #include "../common/agent.h"
 #include "../common/packet.h"
+#include "../common/ip.h"
 
-#define WINDOW_SIZE
+#define WINDOW_SIZE 4000
+
+enum Xyzzy_header_types { T_normal, T_ack };
 
 struct hdr_Xyzzy {
     int srcid_;
     int seqno_;
+    int type_;
     
     /* per-field member functions */
     int& srcid() { return (srcid_); }
     int& seqno() { return (seqno_); }
+    int& type() { return (type_); }
 
     /* Packet header access functions */
     static int offset_;
