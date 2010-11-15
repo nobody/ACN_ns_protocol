@@ -8,7 +8,7 @@ static class testDataClass : public TclClass {
 	}
 } class_app_testData;
 
-void SendTime::expire(Event*){
+void SendTimer::expire(Event*){
 	t_->send_data();
 }
 
@@ -22,7 +22,7 @@ testData::testData(): snd_timer_(this){
 
 	//not sure how the bind works but, interval_ should at least be 
 	//bound here.
-    bind("interval_", interval_);
+    bind("interval_", &interval_);
 }
 
 //otcl command
@@ -47,7 +47,7 @@ int testData::command(int argc, const char*const* argv)
 
 void testData::start(){
 	running_ = 1;
-	sendData();
+	send_data();
 }
 
 void testData::stop(){
