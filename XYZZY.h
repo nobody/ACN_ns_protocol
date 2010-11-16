@@ -9,8 +9,10 @@
 #include "../common/agent.h"
 #include "../common/packet.h"
 #include "../common/ip.h"
+#include <fcntl.h>
+#include <unistd.h>
 
-#define WINDOW_SIZE 4000
+#define WINDOW_SIZE 40
 
 enum Xyzzy_header_types { T_normal, T_ack };
 
@@ -45,6 +47,8 @@ class XyzzyAgent : public Agent {
         int seqno_;
         Packet *packetsSent[WINDOW_SIZE];
         double timesSent[WINDOW_SIZE];
+        int bufLoc_;
+        void recordPacket(Packet*);
     protected:
         double CHECK_BUFFER_INT;
         double MAXDELAY;

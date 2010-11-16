@@ -13,7 +13,7 @@ void SendTimer::expire(Event*){
 }
 
 //constructor go here
-testData::testData(): snd_timer_(this){
+testData::testData(): snd_timer_(this), interval_(0.05){
 	//will declaring this array work here?
 	//or does new need to be used? i don't want to do that 
 	//if its not nesscary
@@ -57,7 +57,9 @@ void testData::stop(){
 void testData::send_data(){
 
 	if(running_){
-		agent_->sendmsg(msgSize_, test_);	
+        PacketData* data = new PacketData(msgSize_);
+        memcpy(data->data(), test_, msgSize_);
+		agent_->sendmsg(msgSize_, data);	
 	
 		//reschedule the event
 		snd_timer_.resched(interval_);

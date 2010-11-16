@@ -35,7 +35,7 @@ set tcp0 [new Agent/Xyzzy]
 #$tcp0 set window_ 60
 $ns attach-agent $n0 $tcp0
 
-set ftp [new Application/Traffic/CBR]
+set ftp [new Application/testData]
 #$ftp set interval_ 0.00005
 #$ftp set rate_ 20Mb
 #$ftp set packetSize_ 200

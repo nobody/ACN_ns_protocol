@@ -1,3 +1,7 @@
+#ifndef ns2_testData_
+#define ns2_testData_
+
+// Add "Application/testData set interval_ 0.05" to tcl/lib/ns-default.tcl
 #include "timer-handler.h"
 #include "packet.h"
 #include "app.h"
@@ -19,9 +23,9 @@ class testData: public Application {
 	int command(int argc, const char*const* argv);
 	void start();       // Start sending data packets (Sender)
 	void stop();        // Stop sending data packets (Sender)
+	double interval_;      // Application data packet transmission interval
 
 	private:
-	double interval_;      // Application data packet transmission interval
 	int random_;           // If 1 add randomness to the interval
 	int running_;          // If 1 application is running
 	int rate_;
@@ -31,3 +35,4 @@ class testData: public Application {
 
 };
 
+#endif

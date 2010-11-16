@@ -25,6 +25,26 @@ XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY)
 {
     bind("packetSize_", &size_);
 
+    // initialize buffer
+    for (int i = 0; i < WINDOW_SIZE; ++i)
+        packetsSent[i] = NULL;
+
+}
+
+void XyzzyAgent::recordPacket(Packet* pkt) {
+    if (packetsSent[bufLoc_] != NULL){
+        // TODO: delay somehow until there's room for another packet.
+        printf("Send buffer full, but I don't know how to wait yet!, packet lost. (seqno: %d) in the way of (seqno: %d)\n", hdr_Xyzzy::access(packetsSent[bufLoc_])->seqno(), hdr_Xyzzy::access(pkt)->seqno());
+    } else {
+        // TODO: send to buddies
+
+        packetsSent[bufLoc_] = pkt;
+        timesSent[bufLoc_] = 1;
+
+        bufLoc_++;
+        bufLoc_ %= WINDOW_SIZE;
+        printf("  New buffer location: %d\n", bufLoc_);
+    }
 }
 
 void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
@@ -50,21 +70,25 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
 
     target_->recv(p);
 
+    recordPacket(p);
+
 }
 void XyzzyAgent::recv(Packet* pkt, Handler*) {
 
     hdr_Xyzzy* oldHdr = hdr_Xyzzy::access(pkt);
 
     if (oldHdr->type() == T_normal){
+
         // Send back an ack
         Packet* ap = allocpkt();
 
         hdr_cmn::access(ap)->ptype() = PT_XYZZY;
-        hdr_cmn::access(ap)->size() = sizeof(hdr_ip) + sizeof(hdr_Xyzzy);
+        hdr_cmn::access(ap)->size() = 0;
 
         hdr_Xyzzy* newHdr = hdr_Xyzzy::access(ap);
         newHdr->type() = T_ack;
         newHdr->seqno() = oldHdr->seqno();
+        printf("Generating ack for seqno %d\n", newHdr->seqno());
 
         // set up ip header
         hdr_ip* newip = hdr_ip::access(ap);
@@ -76,6 +100,19 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
 
         target_->recv(ap);
 
+        // log packet contents to file
+        char fname[13];
+        snprintf(fname, 12, "%d-recv.log", this->addr());
+        FILE* lf = fopen(fname, "a");
+        if (pkt->userdata()){
+            PacketData* data = (PacketData*)pkt->userdata();
+            fwrite(data->data(), data->size(), 1, lf);
+        } else
+            fwrite("NULL Data ", 9, 1, lf);
+        fwrite("\n\n\n", 2, 1, lf);
+        fclose(lf);
+
+        // Forward data on to application.
         if (app_) {
             app_->process_data(hdr_cmn::access(pkt)->size(), pkt->userdata());
         }
@@ -83,6 +120,20 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         if (pkt->userdata())
             printf("Received payload of size %d\n", pkt->userdata()->size());
 
+    } else if (oldHdr->type() == T_ack) {
+        for (int i = 0; i < WINDOW_SIZE; ++i){
+            if (packetsSent[i] != NULL) {
+                hdr_Xyzzy* hdr = hdr_Xyzzy::access(packetsSent[i]);
+                if (hdr->seqno() == oldHdr->seqno()){
+                    printf("Got an ack for %d and marking the packet in the buffer.\n", oldHdr->seqno());
+                    // found it, delete the packet
+                    Packet::free(packetsSent[i]);
+                    packetsSent[i] = NULL;
+                    
+                    break;
+                }
+            }
+        }
     }
 
     Packet::free(pkt);
