@@ -27,6 +27,7 @@ class testData: public Application {
 
 	private:
 	int random_;           // If 1 add randomness to the interval
+    unsigned short counter_;
 	int running_;          // If 1 application is running
 	int rate_;
 	char* test_;

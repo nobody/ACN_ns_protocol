@@ -17,8 +17,8 @@ testData::testData(): snd_timer_(this), interval_(0.05){
 	//will declaring this array work here?
 	//or does new need to be used? i don't want to do that 
 	//if its not nesscary
-	test_ = "this is only a test";
-	msgSize_ = 20;
+//	test_ = "this is only a test";
+	msgSize_ = 28;
 
 	//not sure how the bind works but, interval_ should at least be 
 	//bound here.
@@ -57,8 +57,13 @@ void testData::stop(){
 void testData::send_data(){
 
 	if(running_){
+        counter_++;
+
+        char* str = new char[msgSize_];
+
         PacketData* data = new PacketData(msgSize_);
-        memcpy(data->data(), test_, msgSize_);
+        snprintf(str, msgSize_, "this is only a test: %d", counter_);
+        memcpy(data->data(), str, msgSize_);
 		agent_->sendmsg(msgSize_, data);	
 	
 		//reschedule the event

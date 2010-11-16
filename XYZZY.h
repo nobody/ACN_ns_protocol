@@ -9,10 +9,20 @@
 #include "../common/agent.h"
 #include "../common/packet.h"
 #include "../common/ip.h"
+#include "../common/scheduler.h"
 #include <fcntl.h>
 #include <unistd.h>
 
 #define WINDOW_SIZE 40
+#define RETRY_TIME 0.1
+
+struct ackListNode{
+    int seqno;
+    ackListNode* next;
+
+    public:
+    ackListNode():seqno(0),next(NULL){}
+};
 
 enum Xyzzy_header_types { T_normal, T_ack };
 
@@ -20,16 +30,29 @@ struct hdr_Xyzzy {
     int srcid_;
     int seqno_;
     int type_;
+    int cumAck_;
     
     /* per-field member functions */
     int& srcid() { return (srcid_); }
     int& seqno() { return (seqno_); }
     int& type() { return (type_); }
+    int& cumAck() { return (cumAck_); }
 
     /* Packet header access functions */
     static int offset_;
     inline static int& offset() { return offset_; }
     inline static hdr_Xyzzy* access(const Packet* p) {return (hdr_Xyzzy*) p->access(offset_);}
+};
+
+
+class XyzzyAgent;
+
+class RetryTimer : public TimerHandler {
+	public:
+	RetryTimer(XyzzyAgent* t) : TimerHandler(), t_(t) {}
+	virtual void expire(Event*);
+	protected:
+	XyzzyAgent* t_;
 };
 
 class XyzzyAgent : public Agent {
@@ -43,17 +66,23 @@ class XyzzyAgent : public Agent {
         }
         virtual void recv(Packet* pkt, Handler*);
         virtual int command(int argc, const char*const* argv);
+        void retryPackets();
     private:
         int seqno_;
-        Packet *packetsSent[WINDOW_SIZE];
-        double timesSent[WINDOW_SIZE];
+        Packet *window[WINDOW_SIZE];
+        double numTries[WINDOW_SIZE];
+        double timeSent[WINDOW_SIZE];
         int bufLoc_;
-        void recordPacket(Packet*);
+        void updateCumAck(int);
+        void ackListPrune();
+        void recordPacket(Packet*, double);
+        int cumAck_;
+        ackListNode* ackList;
     protected:
         double CHECK_BUFFER_INT;
         double MAXDELAY;
+        RetryTimer retry_;
 };
-
 
 
 #endif

@@ -1,3 +1,4 @@
+set RATE 0.02
 set ns [new Simulator]
 
 #$ns rtproto DV
@@ -29,6 +30,19 @@ $ns duplex-link $n0 $n1 100Mb 5ms DropTail
 $ns duplex-link-op $n0 $n1 orient right
 $ns duplex-link-op $n0 $n1 queuePos 0.5
 
+set secs [clock clicks -milliseconds]
+set seed  [expr $secs % 2000000000]
+set rng [new RNG]
+$rng seed $seed
+
+set rv [new RandomVariable/Uniform]
+$rv use-rng $rng
+set lossmodel [new ErrorModel]
+$lossmodel unit pkt
+$lossmodel set rate_ $RATE
+$lossmodel ranvar $rv
+$ns link-lossmodel $lossmodel $n0 $n1
+#$lossmodel drop-target [new Agent/Null]
 
 set tcp0 [new Agent/Xyzzy]
 #$tcp0 set packetSize_ 200
