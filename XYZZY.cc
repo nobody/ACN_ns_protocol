@@ -46,7 +46,7 @@ void XyzzyAgent::retryPackets() {
             printf("[%d] ** RETRYING PACKET %d **\n", here_.addr_, hdr_Xyzzy::access(window[i])->seqno());
 
             // send again.
-            target_->recv(window[i]);
+            target_->recv(window[i]->copy());
 
             // TODO: let buddies know we retried
             numTries[i]++;
@@ -66,17 +66,17 @@ void XyzzyAgent::retryPackets() {
 void XyzzyAgent::recordPacket(Packet* pkt, double time) {
     if (window[bufLoc_] != NULL){
         // TODO: delay somehow until there's room for another packet.
-        printf("Send buffer full, but I don't know how to wait yet!, packet lost. (seqno: %d) in the way of (seqno: %d)\n", hdr_Xyzzy::access(window[bufLoc_])->seqno(), hdr_Xyzzy::access(pkt)->seqno());
+        printf("[%d] Send buffer full, but I don't know how to wait yet!, packet lost. (seqno: %d) in the way of (seqno: %d)\n", here_.addr_, hdr_Xyzzy::access(window[bufLoc_])->seqno(), hdr_Xyzzy::access(pkt)->seqno());
     } else {
         // TODO: send to buddies
 
-        window[bufLoc_] = pkt->copy();
+        window[bufLoc_] = pkt;
         numTries[bufLoc_] = 1;
         timeSent[bufLoc_] = time;
 
         bufLoc_++;
         bufLoc_ %= WINDOW_SIZE;
-        printf("  New buffer location: %d\n", bufLoc_);
+        printf("[%d]  New buffer location: %d\n", here_.addr_, bufLoc_);
     }
 }
 
@@ -84,10 +84,10 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
     Packet* p;
 
     if (size_ == 0)
-        printf("Xyzzy size_ is 0!\n");
+        printf("[%d] Xyzzy size_ is 0!\n", here_.addr_);
 
     if (data && nbytes > size_) {
-        printf("Xyzzy data does not fit in a single packet. Abotr\n");
+        printf("[%d] Xyzzy data does not fit in a single packet. Abotr\n", here_.addr_);
         return;
     }
 
@@ -101,9 +101,10 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
 
     p->setdata(data);
 
+    Packet* pcopy = p->copy();
     target_->recv(p);
 
-    recordPacket(p, Scheduler::instance().clock());
+    recordPacket(pcopy, Scheduler::instance().clock());
 
 }
 void XyzzyAgent::updateCumAck(int seqno){
@@ -118,6 +119,8 @@ void XyzzyAgent::updateCumAck(int seqno){
                 usefulOne = current;
             }else if (current->seqno > seqno){
                 break; 
+            }else{
+                return;
             }
         }while((current = current->next));
         usefulOne->next = new ackListNode;
@@ -209,14 +212,14 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         }
 
         if (pkt->userdata())
-            printf("Received payload of size %d\n", pkt->userdata()->size());
+            printf("[%d] Received payload of size %d\n", here_.addr_, pkt->userdata()->size());
 
     } else if (oldHdr->type() == T_ack) {
         for (int i = 0; i < WINDOW_SIZE; ++i){
             if (window[i] != NULL) {
                 hdr_Xyzzy* hdr = hdr_Xyzzy::access(window[i]);
                 if (hdr->seqno() == oldHdr->seqno()){
-                    printf("Got an ack for %d and marking the packet in the buffer.\n", oldHdr->seqno());
+                    printf("[%d] Got an ack for %d and marking the packet in the buffer.\n", here_.addr_, oldHdr->seqno());
                     // found it, delete the packet
                     Packet::free(window[i]);
                     window[i] = NULL;

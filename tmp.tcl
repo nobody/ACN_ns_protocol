@@ -1,4 +1,4 @@
-set RATE 0.02
+set RATE 0.1
 set ns [new Simulator]
 
 #$ns rtproto DV
