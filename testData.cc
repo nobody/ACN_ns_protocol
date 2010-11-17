@@ -13,7 +13,7 @@ void SendTimer::expire(Event*){
 }
 
 //constructor go here
-testData::testData(): snd_timer_(this), interval_(0.05){
+testData::testData(): interval_(0.05), snd_timer_(this){
 	//will declaring this array work here?
 	//or does new need to be used? i don't want to do that 
 	//if its not nesscary

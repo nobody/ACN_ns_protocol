@@ -87,7 +87,7 @@ void XyzzyAgent::retryPackets() {
 }
 
 void XyzzyAgent::recordPacket(Packet* pkt, double time) {
-    if (window[bufLoc_] != NULL)
+    if (window[bufLoc_] != NULL){
         // TODO: delay somehow until there's room for another packet.
         // this is probably better handled in send
         printf("[%d] Send buffer full, but I don't know how to wait yet!, packet lost. (seqno: %d) in the way of (seqno: %d)\n", here_.addr_, hdr_Xyzzy::access(window[bufLoc_])->seqno(), hdr_Xyzzy::access(pkt)->seqno());
