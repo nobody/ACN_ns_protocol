@@ -16,6 +16,10 @@
 #define WINDOW_SIZE 40
 #define RETRY_TIME 0.1
 
+//this struct is used to keep a linked list of the 
+//messages for which we have received acks. we periodically
+//cull all sequential messages from the front of the list
+//this lets us keep track of our "holes" like sctp
 struct ackListNode{
     int seqno;
     ackListNode* next;
@@ -24,8 +28,14 @@ struct ackListNode{
     ackListNode():seqno(0),next(NULL){}
 };
 
+//these are the types of headers our protocol uses
+
 enum Xyzzy_header_types { T_normal, T_ack };
 
+//this is the header struct
+//it contains functions and varibles 
+//not only for our headder but for the stupid way
+//ns2 does packets
 struct hdr_Xyzzy {
     int srcid_;
     int seqno_;
@@ -47,14 +57,19 @@ struct hdr_Xyzzy {
 
 class XyzzyAgent;
 
+//timer for auto firing the our attempts to retransmit packets
+//every time the timer goes off, or retransmit function executes
 class RetryTimer : public TimerHandler {
-	public:
-	RetryTimer(XyzzyAgent* t) : TimerHandler(), t_(t) {}
-	virtual void expire(Event*);
-	protected:
-	XyzzyAgent* t_;
+    public:
+    RetryTimer(XyzzyAgent* t) : TimerHandler(), t_(t) {}
+    virtual void expire(Event*);
+    protected:
+    XyzzyAgent* t_;
 };
 
+//this is our actuall agent class our actuall protocol
+//for more specifics on how methods work and what they are
+//used for look at the .cc file
 class XyzzyAgent : public Agent {
     public:
         friend class CheckBufferTimer;
@@ -68,15 +83,31 @@ class XyzzyAgent : public Agent {
         virtual int command(int argc, const char*const* argv);
         void retryPackets();
     private:
+        //our present sequence number
         int seqno_;
+
+        //thes packets govern our retransmission of packets
+        //window is where packets are stored until they are acked
+        //numTries is where we record how many times we have tried 
+        //to resend the packet
+        //timeSent is a time stamp so we know when to try to resend
+        //a packet
         Packet *window[WINDOW_SIZE];
         double numTries[WINDOW_SIZE];
         double timeSent[WINDOW_SIZE];
+
+        //this keeps track of the head of the window buffer since
+        //it is a circular buffer
         int bufLoc_;
+
         void updateCumAck(int);
         void ackListPrune();
         void recordPacket(Packet*, double);
+
+        //the current cumulative ack value
         int cumAck_;
+
+        //the head of linked list of received packets
         ackListNode* ackList;
     protected:
         double CHECK_BUFFER_INT;
@@ -87,4 +118,4 @@ class XyzzyAgent : public Agent {
 
 #endif
 
-/* vi: set tabstop=4, softtabstop=4, shiftwidth=4, expandtab */
+/* vi: set tabstop=4 softtabstop=4 shiftwidth=4 expandtab : */
