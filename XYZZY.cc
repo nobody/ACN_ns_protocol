@@ -24,15 +24,15 @@ static class XyzzyAgentClass : public TclClass {
         }
 } class_xyzzyagent;
 
-//when the retry timer expires it 
+//when the retry timer expires it
 //calls retryPackets()
 void RetryTimer::expire(Event*){
     t_->retryPackets();
 }
 
-//this is the constructor, it creates the super and the 
+//this is the constructor, it creates the super and the
 //retry timer in the initialization statments
-XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY), retry_(this)
+XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY), seqno_(0), retry_(this)
 {
     //bind the varible to a Tcl varible
     bind("packetSize_", &size_);
@@ -46,13 +46,13 @@ XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY), retry_(this)
     ackList = NULL;
 
     //schedule the retry timer
-    retry_.sched(RETRY_TIME+0.5);
+    retry_.sched(RETRY_TIME+0.6);
 }
 
 //retry packet resends unacked packets every half second or so
 void XyzzyAgent::retryPackets() {
 
-    //we want to get the time and compare it against the time that 
+    //we want to get the time and compare it against the time that
     //each packet in our window was sent, if more thatn the RETRY_TIME
     //has elapsed we want to send it again
     double timeNow = Scheduler::instance().clock();
@@ -62,21 +62,21 @@ void XyzzyAgent::retryPackets() {
             printf("[%d] ** RETRYING PACKET %d **\n", here_.addr_, hdr_Xyzzy::access(window[i])->seqno());
 
             // send again.
-            // this needs to be copied here because recv frees packets when 
+            // this needs to be copied here because recv frees packets when
             // it gets them and if it frees a packet that is still in our window
             // and then it gets called again because it was dropped...Bad things happen
             target_->recv(window[i]->copy());
 
             // TODO: let buddies know we retried
 
-            //now we increment how many times we have tried to send the packet and update 
+            //now we increment how many times we have tried to send the packet and update
             //the time stamp
             numTries[i]++;
             timeSent[i] = Scheduler::instance().clock();
         }
     }
 
-    //set the timer to fire again 
+    //set the timer to fire again
     if (retry_.status() == TIMER_IDLE)
         retry_.sched(RETRY_TIME);
     else if (retry_.status() == TIMER_PENDING){
@@ -94,14 +94,14 @@ void XyzzyAgent::recordPacket(Packet* pkt, double time) {
     } else {
         // TODO: send to buddies
 
-        //store the packet we just sent in the 
+        //store the packet we just sent in the
         //window and set all the relevant varibles
         window[bufLoc_] = pkt;
         numTries[bufLoc_] = 1;
         timeSent[bufLoc_] = time;
 
         //move the buffer location forward one.
-        //and move it back around if it has moved 
+        //and move it back around if it has moved
         //past the bounds of the array
         bufLoc_++;
         bufLoc_ %= WINDOW_SIZE;
@@ -143,7 +143,7 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
     p->setdata(data);
 
     //copy the packet because as soon as we pass it to the receive function
-    //it will be freed and we need to keep a copy of it just incase it was 
+    //it will be freed and we need to keep a copy of it just incase it was
     //dropped and needs to be retransmitted
     Packet* pcopy = p->copy();
     target_->recv(p);
@@ -151,34 +151,34 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
 
 }
 
-//this function is used to add a sequence number to our list of 
+//this function is used to add a sequence number to our list of
 //received packets when we get a new packet
 void XyzzyAgent::updateCumAck(int seqno){
     ackListNode* usefulOne;
 
-    //if the list is empty we want to create a 
-    //new list node to be the head of the list 
+    //if the list is empty we want to create a
+    //new list node to be the head of the list
     //and set it to be the useful one that we will add thigns to later
     if(!ackList){
         ackList = new ackListNode;
         usefulOne = ackList;
 
-    //if there exists a list, we need to find the point in the list were this 
+    //if there exists a list, we need to find the point in the list were this
     //packet fits and put it there
     }else{
         ackListNode* current = ackList;
 
         //crawl through the list of pakcets
         do{
-            //if the current node is still less then the seqence number we want to 
+            //if the current node is still less then the seqence number we want to
             //place advance usefulOne and loop again if there is still list
             if(current->seqno < seqno){
                 usefulOne = current;
 
-            //if the next element has a larger sequence number 
+            //if the next element has a larger sequence number
             //we need to escape the loop because useful one contains the node we need
             }else if (current->seqno > seqno){
-                break; 
+                break;
 
             //if we receive a packet we already acked just die
             //noting needs to be done
@@ -204,11 +204,11 @@ void XyzzyAgent::updateCumAck(int seqno){
 }
 
 //as we receive and ack more messages eventually the end of the list closest to the
-//head will become consecutive and thus nolonger nesscary as the head of the list 
+//head will become consecutive and thus nolonger nesscary as the head of the list
 //represents a cumulative ack, so we prune them off
 void XyzzyAgent::ackListPrune(){
 
-    //check to make sure there atleast two 
+    //check to make sure there atleast two
     //elements in the list
     if(!ackList || !ackList->next)
         return;
@@ -219,8 +219,8 @@ void XyzzyAgent::ackListPrune(){
     int last_seqno = ackList->seqno;
     int count = 0;
 
-    //step through the list and count the number of consecutive 
-    //sequence numbers at the beginning. break as soon as you hit a 
+    //step through the list and count the number of consecutive
+    //sequence numbers at the beginning. break as soon as you hit a
     //sequence number that is not one more than the previous one
     while((current = current->next)){
         if(current->seqno == last_seqno + 1){
@@ -228,7 +228,7 @@ void XyzzyAgent::ackListPrune(){
             last_seqno = current->seqno;
             count++;
         }else {
-            break; 
+            break;
         }
     }
 
@@ -249,7 +249,7 @@ void XyzzyAgent::ackListPrune(){
 //this is the function called by ns2 when the node this agent is bound
 //to receives a message
 //
-//WARNING:  THIS METHOD RELEASES ANY PACKETS IT RECEIVES...MAKE SURE IF 
+//WARNING:  THIS METHOD RELEASES ANY PACKETS IT RECEIVES...MAKE SURE IF
 //A PACKET IS PASSED TO RECEIVE IT IS EITHER COPIED FOR BOOK KEEPING STRUCTURES,
 //COPIED FOR RECEIVE, OR YOU ARE HAPPY WITH IT DISSAPPEARING
 void XyzzyAgent::recv(Packet* pkt, Handler*) {
@@ -269,7 +269,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         hdr_cmn::access(ap)->size() = 0;
 
         //TODO: wrap around oh noes!
-    
+
         //update the list of acked packets
         //and prune any consecutive ones from the front
         //of the list...we don't need them any more
@@ -279,7 +279,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         //create a new protocol specific header for the packet
         hdr_Xyzzy* newHdr = hdr_Xyzzy::access(ap);
 
-        //set the fields in our new header to the ones that were 
+        //set the fields in our new header to the ones that were
         //in the packet we just received
         newHdr->type() = T_ack;
         newHdr->seqno() = oldHdr->seqno();
@@ -300,7 +300,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         //storage and retransmission is not nesscary
         target_->recv(ap);
 
-        // log packet contents to file so we can see what we got 
+        // log packet contents to file so we can see what we got
         // and what we lossed and how many copies of each O.o
         char fname[13];
         snprintf(fname, 12, "%d-recv.log", this->addr());
@@ -336,7 +336,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                     // found it, delete the packet
                     Packet::free(window[i]);
                     window[i] = NULL;
-                    
+
                     break;
                 //if the packet is less than the cumulative ack that came in
                 //on the newest packet we can dump it too while were at it.
@@ -358,21 +358,98 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
 //This function processes commands to the agent from the TCL script
 int XyzzyAgent::command(int argc, const char*const* argv) {
 
-    if (argc == 4 && strcmp(argv[1], "send") == 0) {
+    if (argc == 3 && strcmp(argv[1], "set-multihome-core") == 0) {
+        Classifier* opCoreTarget = (Classifier *) TclObject::lookup(argv[2]);
+        if(opCoreTarget == NULL)
+        {
+            return (TCL_ERROR);
+        }
+        return (TCL_OK);
+    } else if (argc == 3 && strcmp(argv[1], "set-primary-destination") == 0) {
+        Node* opNode = (Node *) TclObject::lookup(argv[2]);
+        if(opNode == NULL)
+          {
+            return (TCL_ERROR);
+          }
+        
+        // see if the dest is in the list and make it the primary
+        if (destList == NULL){
+            printf("[%d] Trying to set primary dest when there are no destinations\n", here_.addr_);
+            return (TCL_ERROR);
+        }
+
+        DestNode* current = destList;
+        do{
+           if (current && current->iNsAddr == opNode->address()){
+                primaryDest = current;
+                break;
+           }
+        } while((current->next));
+    } else if (argc == 4 && strcmp(argv[1], "send") == 0) {
         PacketData* d = new PacketData(strlen(argv[3]) + 1);
         strcpy((char*)d->data(), argv[3]);
         sendmsg(atoi(argv[2]), d);
         return TCL_OK;
+    } else if (argc == 4 && strcmp(argv[1], "add-multihome-destination") == 0) {
+        int iNsAddr = atoi(argv[2]);
+        int iNsPort = atoi(argv[3]);
+        AddDestination(iNsAddr, iNsPort);
+        return (TCL_OK);
     } else if (argc == 5 && strcmp(argv[1], "sendmsg") == 0) {
         PacketData* d = new PacketData(strlen(argv[3]) + 1);
         strcpy((char*)d->data(), argv[3]);
         sendmsg(atoi(argv[2]), d, argv[4]);
         return TCL_OK;
+    }else if (argc == 6 && strcmp(argv[1], "add-multihome-interface") == 0) {
+        // get interface information and pass it to AddInterface
+        int iNsAddr = atoi(argv[2]);
+        int iNsPort = atoi(argv[3]);
+        NsObject* opTarget = (NsObject *) TclObject::lookup(argv[4]);
+        if(opTarget == NULL)
+        {
+            return (TCL_ERROR);
+        }
+        NsObject* opLink = (NsObject *) TclObject::lookup(argv[5]);
+        if(opLink == NULL)
+        {
+            return (TCL_ERROR);
+        }
+        AddInterface(iNsAddr, iNsPort, opTarget, opLink);
+        return (TCL_OK);
     }
-        
+
     return Agent::command(argc, argv);
 }
 
+// Add an interface to the interface list
+void XyzzyAgent::AddInterface(int iNsAddr, int iNsPort,
+        NsObject *opTarget, NsObject *opLink) {
+    IfaceNode* iface = new IfaceNode;
+    iface->iNsAddr = iNsAddr;
+    iface->iNsPort = iNsPort;
+    iface->opTarget = opTarget;
+    iface->opLink = opLink;
+
+    IfaceNode* head = ifaceList;
+
+    iface->next = head;
+    ifaceList = iface;
+}
+
+// add a new destination to the destination list
+void XyzzyAgent::AddDestination(int iNsAddr, int iNsPort) {
+    DestNode* newDest = new DestNode;
+    newDest->iNsAddr = iNsAddr;
+    newDest->iNsPort = iNsPort;
+
+    // set the primary to the last destination added just in case the user does not set a primary
+    primaryDest = newDest;
+
+    DestNode* head = destList;
+
+    newDest->next = head;
+    destList = newDest;
+}
 
 
 /* vi: set tabstop=4 softtabstop=4 shiftwidth=4 expandtab : */

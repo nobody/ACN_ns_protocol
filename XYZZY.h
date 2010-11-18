@@ -7,6 +7,7 @@
 // Add "XYZZY/XYZZY.o \" to the Makefile as an object to be built
 
 #include "../common/agent.h"
+#include "../common/node.h"
 #include "../common/packet.h"
 #include "../common/ip.h"
 #include "../common/scheduler.h"
@@ -14,7 +15,7 @@
 #include <unistd.h>
 
 #define WINDOW_SIZE 40
-#define RETRY_TIME 0.1
+#define RETRY_TIME 1
 
 //this struct is used to keep a linked list of the 
 //messages for which we have received acks. we periodically
@@ -26,6 +27,28 @@ struct ackListNode{
 
     public:
     ackListNode():seqno(0),next(NULL){}
+};
+
+// this struct is used to maintain information about destination ips.
+struct DestNode {
+    int iNsAddr;
+    int iNsPort;
+
+    DestNode* next;
+
+    DestNode():iNsAddr(0),iNsPort(0),next(NULL){}
+};
+
+// this is used to maintain the list of interfaces we have available
+struct IfaceNode {
+    int iNsAddr;
+    int iNsPort;
+    NsObject* opTarget;
+    NsObject* opLink;
+
+    IfaceNode* next;
+
+    IfaceNode():iNsAddr(0),iNsPort(0),opTarget(NULL),opLink(NULL),next(NULL){}
 };
 
 //these are the types of headers our protocol uses
@@ -100,15 +123,34 @@ class XyzzyAgent : public Agent {
         //it is a circular buffer
         int bufLoc_;
 
+        //the following 2 functions maintain the ackList
         void updateCumAck(int);
         void ackListPrune();
+
+        // this records packet information in the window, numTries,
+        // and timeSent arrays
         void recordPacket(Packet*, double);
+
+        // Adds an interface to the list
+        void AddInterface(int, int, NsObject*, NsObject*);
+
+        // Adds a destination to the list
+        void AddDestination(int, int);
 
         //the current cumulative ack value
         int cumAck_;
 
         //the head of linked list of received packets
         ackListNode* ackList;
+        
+        // head of the interface list
+        IfaceNode* ifaceList;
+
+        // head of the destination list
+        DestNode* destList;
+
+        // the primary destination
+        DestNode* primaryDest;
     protected:
         double CHECK_BUFFER_INT;
         double MAXDELAY;
