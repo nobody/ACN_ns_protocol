@@ -32,7 +32,7 @@ void RetryTimer::expire(Event*){
 
 //this is the constructor, it creates the super and the
 //retry timer in the initialization statments
-XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY), seqno_(0), retry_(this)
+XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY), seqno_(0), coreTarget(NULL), bufLoc_(0), retry_(this)
 {
     //bind the varible to a Tcl varible
     bind("packetSize_", &size_);
@@ -127,6 +127,8 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
         return;
     }
 
+    setupPacket();
+
     //allocate a new packet from the pool
     p = allocpkt();
 
@@ -146,9 +148,55 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
     //it will be freed and we need to keep a copy of it just incase it was
     //dropped and needs to be retransmitted
     Packet* pcopy = p->copy();
-    target_->recv(p);
+    //target_->recv(p);
+    send(p, 0);
     recordPacket(pcopy, Scheduler::instance().clock());
 
+}
+
+void XyzzyAgent::setupPacket(Packet* pkt){
+    DestNode* dest;
+    if (pkt){
+        // find the dest node matching the source in this packet
+        dest = destList;
+        while((dest)){
+            if (dest->iNsAddr == hdr_ip::access(pkt)->src().addr_
+                && dest->iNsPort == hdr_ip::access(pkt)->src().port_){
+                break;
+            } else {
+                dest = dest->next;
+            }
+        }
+        if (dest == NULL)
+            dest = primaryDest;
+    } else {
+        dest = primaryDest;
+    }
+    // set source info
+    if (coreTarget != NULL){
+        daddr() = dest->iNsAddr;
+        dport() = dest->iNsPort;
+        Packet* routingPacket = allocpkt();
+
+        Connector* conn = (Connector*) coreTarget->find(routingPacket);
+
+        IfaceNode* current = ifaceList;
+
+        while(current != NULL){
+            if (current->opLink == conn){
+                addr() = current->iNsAddr;
+                port() = current->iNsPort;
+                target_ = current->opTarget;
+                break;
+            } else {
+                current = current->next;
+            }
+        }
+    }
+
+    // set dest info
+    daddr() = dest->iNsAddr;
+    dport() = dest->iNsPort;
 }
 
 //this function is used to add a sequence number to our list of
@@ -262,6 +310,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
     if (oldHdr->type() == T_normal){
 
         // Send back an ack, so allocate a packet
+        setupPacket(pkt);
         Packet* ap = allocpkt();
 
         //set up its common header values ie protocol type and size of data
@@ -298,7 +347,8 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
 
         //send the ack packet, since it contains a cumulative
         //storage and retransmission is not nesscary
-        target_->recv(ap);
+        //target_->recv(ap);
+        send(ap, 0);
 
         // log packet contents to file so we can see what we got
         // and what we lossed and how many copies of each O.o
@@ -359,8 +409,8 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
 int XyzzyAgent::command(int argc, const char*const* argv) {
 
     if (argc == 3 && strcmp(argv[1], "set-multihome-core") == 0) {
-        Classifier* opCoreTarget = (Classifier *) TclObject::lookup(argv[2]);
-        if(opCoreTarget == NULL)
+        coreTarget = (Classifier *) TclObject::lookup(argv[2]);
+        if(coreTarget == NULL)
         {
             return (TCL_ERROR);
         }
@@ -378,13 +428,15 @@ int XyzzyAgent::command(int argc, const char*const* argv) {
             return (TCL_ERROR);
         }
 
-        DestNode* current = destList;
-        do{
-           if (current && current->iNsAddr == opNode->address()){
+        for(DestNode* current = destList; current != NULL; current = current->next){
+           if (current->iNsAddr == opNode->address()){
                 primaryDest = current;
-                break;
+                return (TCL_OK);
            }
-        } while((current->next));
+        }
+
+        return (TCL_ERROR);
+        
     } else if (argc == 4 && strcmp(argv[1], "send") == 0) {
         PacketData* d = new PacketData(strlen(argv[3]) + 1);
         strcpy((char*)d->data(), argv[3]);

@@ -108,6 +108,7 @@ class XyzzyAgent : public Agent {
     private:
         //our present sequence number
         int seqno_;
+        Classifier* coreTarget;
 
         //thes packets govern our retransmission of packets
         //window is where packets are stored until they are acked
@@ -130,6 +131,9 @@ class XyzzyAgent : public Agent {
         // this records packet information in the window, numTries,
         // and timeSent arrays
         void recordPacket(Packet*, double);
+
+        // set up source and dest for packet
+        void setupPacket(Packet* pkt = NULL);
 
         // Adds an interface to the list
         void AddInterface(int, int, NsObject*, NsObject*);
