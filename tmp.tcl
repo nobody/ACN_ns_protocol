@@ -16,58 +16,118 @@ proc finish {} {
 	close $nf
 	close $tr
 
-	#exec nam tmp.nam &
-	#exec /net/core/export/home/cs/001/c/courses/cs6390002/acngr01/tp.pl tmp.tr
+	exec nam tmp.nam &
 	exit 0
 }
 
 
-set n0 [$ns node]
-set n1 [$ns node]
+#set n0core [$ns node]
+#set n0if0 [$ns node]
+#set n0if1 [$ns node]
+#
+#set n1core [$ns node]
+#set n1if0 [$ns node]
+#set n1if1 [$ns node]
+#
+#$ns multihome-add-interface $n0core $n0if0
+#$ns multihome-add-interface $n0core $n0if1
+#
+#$ns multihome-add-interface $n1core $n1if0
+#$ns multihome-add-interface $n1core $n1if1
+#
+#$ns duplex-link $n0if0 $n1if0 .5Mb 200ms DropTail
+#$ns duplex-link $n0if1 $n1if1 .5Mb 200ms DropTail
+#
+#set xyzzy0 [new Agent/Xyzzy]
+#$ns multihome-attach-agent $n0core $xyzzy0
+#
+#set testData [new Application/testData]
+#$testData attach-agent $xyzzy0
+#
+#set xyzzy1 [new Agent/Xyzzy]
+#$ns multihome-attach-agent $n1core $xyzzy1
+#
+##$ns connect $tcp0 $tcpsink
+##$ns connect $xyzzy0 $xyzzy1
+#
+#$xyzzy0 set class_ 1
+#$ns color 1 Blue
+#
+#
+#$ns at 0.5 "$testData start"
+#$ns at 10.5 "$testData stop"
+#
+#$ns at 15.0 "finish"
+#
+#$ns run
+#
 
-$ns duplex-link $n0 $n1 100Mb 5ms DropTail
 
-$ns duplex-link-op $n0 $n1 orient right
-$ns duplex-link-op $n0 $n1 queuePos 0.5
+set host0_core [$ns node]
+set host0_if0 [$ns node]
+set host0_if1 [$ns node]
+$host0_core color Red
+$host0_if0 color Red
+$host0_if1 color Red
+$ns multihome-add-interface $host0_core $host0_if0
+$ns multihome-add-interface $host0_core $host0_if1
 
-set secs [clock clicks -milliseconds]
-set seed  [expr $secs % 2000000000]
-set rng [new RNG]
-$rng seed $seed
+set host1_core [$ns node]
+set host1_if0 [$ns node]
+set host1_if1 [$ns node]
+$host1_core color Blue
+$host1_if0 color Blue
+$host1_if1 color Blue
+$ns multihome-add-interface $host1_core $host1_if0
+$ns multihome-add-interface $host1_core $host1_if1
 
-set rv [new RandomVariable/Uniform]
-$rv use-rng $rng
-set lossmodel [new ErrorModel]
-$lossmodel unit pkt
-$lossmodel set rate_ $RATE
-$lossmodel ranvar $rv
-$ns link-lossmodel $lossmodel $n0 $n1
-#$lossmodel drop-target [new Agent/Null]
+$ns duplex-link $host0_if0 $host1_if0 .5Mb 200ms DropTail
+$ns duplex-link $host0_if1 $host1_if1 .5Mb 200ms DropTail
 
-set tcp0 [new Agent/Xyzzy]
-#$tcp0 set packetSize_ 200
-#$tcp0 set window_ 60
-$ns attach-agent $n0 $tcp0
+set xyzzy0 [new Agent/Xyzzy]
+$ns multihome-attach-agent $host0_core $xyzzy0
+#$xyzzy0 set fid_ 0
+#$xyzzy0 set debugMask_ -1
+#$xyzzy0 set debugFileIndex_ 0
+#$xyzzy0 set mtu_ 1500
+#$xyzzy0 set dataChunkSize_ 1468
+#$xyzzy0 set numOutStreams_ 1
+#$xyzzy0 set oneHeartbeatTimer_ 1   # one heartbeat timer shared for all dests
 
-set ftp [new Application/testData]
-#$ftp set interval_ 0.00005
-#$ftp set rate_ 20Mb
-#$ftp set packetSize_ 200
-$ftp attach-agent $tcp0
+set trace_ch [open trace.xyzzy w]
+$xyzzy0 set trace_all_ 1           # trace them all on oneline
+$xyzzy0 trace cwnd_
+$xyzzy0 trace rto_
+$xyzzy0 trace errorCount_
+$xyzzy0 attach $trace_ch
 
-set tcpsink [new Agent/Xyzzy]
-$ns attach-agent $n1 $tcpsink
+set xyzzy1 [new Agent/Xyzzy]
+$ns multihome-attach-agent $host1_core $xyzzy1
+#$xyzzy1 set debugMask_ -1
+#$xyzzy1 set debugFileIndex_ 1
+#$xyzzy1 set mtu_ 1500
+#$xyzzy1 set initialRwnd_ 131072
+#$xyzzy1 set useDelayedSacks_ 1
 
-$ns connect $tcp0 $tcpsink
-
-$tcp0 set class_ 1
-
+$ns color 0 Red
 $ns color 1 Blue
 
+$ns connect $xyzzy0 $xyzzy1
 
-$ns at 0.5 "$ftp start"
-$ns at 10.5 "$ftp stop"
+set ftp0 [new Application/testData]
+$ftp0 attach-agent $xyzzy0
 
-$ns at 15.0 "finish"
+# set primary before association starts
+$xyzzy0 set-primary-destination $host1_if0
+
+# do a change primary in the middle of the association
+#$ns at 7.5 "$xyzzy0 set-primary-destination $host1_if1"
+#$ns at 7.5 "$xyzzy0 print cwnd_"
+
+# simulate link failure
+$ns rtmodel-at 5.0 down $host0_if0
+$ns at 0.5 "$ftp0 start"
+$ns at 10.0 "finish"
 
 $ns run
+

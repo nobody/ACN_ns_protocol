@@ -7,6 +7,7 @@
 // Add "XYZZY/XYZZY.o \" to the Makefile as an object to be built
 
 #include "../common/agent.h"
+#include "../common/node.h"
 #include "../common/packet.h"
 #include "../common/ip.h"
 #include "../common/scheduler.h"
@@ -14,7 +15,9 @@
 #include <unistd.h>
 
 #define WINDOW_SIZE 40
-#define RETRY_TIME 0.1
+#define RETRY_TIME 1
+#define MAX_HB_MISS 2
+#define HB_INTERVAL 0.5
 
 #define B_DEAD 0
 #define B_ACTIVE 1
@@ -40,10 +43,33 @@ struct buddyNode{
     int status;
     int missedHBS;
 };
+// this struct is used to maintain information about destination ips.
+struct DestNode {
+    int iNsAddr;
+    int iNsPort;
+    bool reachable;
+    int rcount;
+
+    DestNode* next;
+
+    DestNode():iNsAddr(0),iNsPort(0),reachable(true),rcount(0),next(NULL){}
+};
+
+// this is used to maintain the list of interfaces we have available
+struct IfaceNode {
+    int iNsAddr;
+    int iNsPort;
+    NsObject* opTarget;
+    NsObject* opLink;
+
+    IfaceNode* next;
+
+    IfaceNode():iNsAddr(0),iNsPort(0),opTarget(NULL),opLink(NULL),next(NULL){}
+};
 
 //these are the types of headers our protocol uses
 
-enum Xyzzy_header_types { T_normal, T_ack, T_buddy, T_beat};
+enum Xyzzy_header_types { T_normal, T_ack, T_heartbeat, T_buddy, T_beat };
 
 //this is the header struct
 //it contains functions and varibles 
@@ -55,6 +81,7 @@ struct hdr_Xyzzy {
     int type_;
     int cumAck_;
     char sndRcv_;
+    int heartbeat_;
     
     /* per-field member functions */
     int& srcid() { return (srcid_); }
@@ -62,6 +89,7 @@ struct hdr_Xyzzy {
     int& type() { return (type_); }
     int& cumAck() { return (cumAck_); }
     char& sndRcv() {return (sndRcv_); }
+    int& heartbeat() { return (heartbeat_); }
 
     /* Packet header access functions */
     static int offset_;
@@ -91,12 +119,34 @@ class BuddyTimer : public TimerHandler{
         XyzzyAgent* t_;
 };
 
+class HeartbeatTimer : public TimerHandler {
+    public:
+        HeartbeatTimer(XyzzyAgent* t) : TimerHandler(), t_(t) {}
+        virtual void expire(Event*);
+    protected:
+        XyzzyAgent* t_;
+};
+
+// Generic Timeout Timer. 
+// Given a function pointer with signature void fn(void*) and a void*,
+// it will call the function with the given argument when it expires
+class TimeoutTimer : public TimerHandler {
+    public:
+        TimeoutTimer(XyzzyAgent* t, void(XyzzyAgent::*fn)(void*), void* arg) : TimerHandler(), t_(t), fn_(fn), arg_(arg) {}
+        virtual void expire(Event*);
+    protected:
+        XyzzyAgent* t_;
+        void(XyzzyAgent::*fn_)(void *);
+        void* arg_;
+};
+
 //this is our actuall agent class our actuall protocol
 //for more specifics on how methods work and what they are
 //used for look at the .cc file
 class XyzzyAgent : public Agent {
     public:
-        friend class CheckBufferTimer;
+        friend class HeartbeatTimer;
+        friend class TimeoutTimer;
         XyzzyAgent();
         XyzzyAgent(packet_t);
         virtual void sendmsg(int nbytes, AppData* data, const char *flags = 0);
@@ -110,6 +160,7 @@ class XyzzyAgent : public Agent {
     private:
         //our present sequence number
         int seqno_;
+        Classifier* coreTarget;
 
         //thes packets govern our retransmission of packets
         //window is where packets are stored until they are acked
@@ -125,9 +176,22 @@ class XyzzyAgent : public Agent {
         //it is a circular buffer
         int bufLoc_;
 
+        //the following 2 functions maintain the ackList
         void updateCumAck(int);
         void ackListPrune();
+
+        // this records packet information in the window, numTries,
+        // and timeSent arrays
         void recordPacket(Packet*, double);
+
+        // set up source and dest for packet
+        void setupPacket(Packet* pkt = NULL);
+
+        // Adds an interface to the list
+        void AddInterface(int, int, NsObject*, NsObject*);
+
+        // Adds a destination to the list
+        void AddDestination(int, int);
 
         //the current cumulative ack value
         int cumAck_;
@@ -143,10 +207,28 @@ class XyzzyAgent : public Agent {
         buddyNode* buddies;
         int numOfBuddies_;
 
+        
+        // head of the interface list
+        IfaceNode* ifaceList;
+
+        // head of the destination list
+        DestNode* destList;
+
+        // the primary destination
+        DestNode* primaryDest;
+
+        // set primary destination to next available
+        void nextDest();
+
+        // Send a heartbeat to the active node and set up a timeout timer
+        void heartbeat();
+        void heartbeatTimeout(void*);
+        TimeoutTimer* hbTimeout_;
     protected:
         double CHECK_BUFFER_INT;
         double MAXDELAY;
         RetryTimer retry_;
+        HeartbeatTimer hb_;
 };
 
 
