@@ -121,9 +121,11 @@ $ftp0 attach-agent $xyzzy0
 $xyzzy0 set-primary-destination $host1_if0
 
 # do a change primary in the middle of the association
-$ns at 7.5 "$xyzzy0 set-primary-destination $host1_if1"
+#$ns at 7.5 "$xyzzy0 set-primary-destination $host1_if1"
 #$ns at 7.5 "$xyzzy0 print cwnd_"
 
+# simulate link failure
+$ns rtmodel-at 5.0 down $host0_if0
 $ns at 0.5 "$ftp0 start"
 $ns at 10.0 "finish"
 

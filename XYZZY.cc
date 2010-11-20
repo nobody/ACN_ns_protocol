@@ -30,9 +30,19 @@ void RetryTimer::expire(Event*){
     t_->retryPackets();
 }
 
+// send a heartbeat when the timer expires
+void HeartbeatTimer::expire(Event*){
+    t_->heartbeat();
+}
+
+// Generic timeout timer -- call the given callback function
+void TimeoutTimer::expire(Event*){
+    (t_->*fn_)(arg_);
+}
+
 //this is the constructor, it creates the super and the
 //retry timer in the initialization statments
-XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY), seqno_(0), coreTarget(NULL), bufLoc_(0), retry_(this)
+XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY), seqno_(0), coreTarget(NULL), bufLoc_(0), hbTimeout_(NULL), retry_(this), hb_(this)
 {
     //bind the varible to a Tcl varible
     bind("packetSize_", &size_);
@@ -65,7 +75,15 @@ void XyzzyAgent::retryPackets() {
             // this needs to be copied here because recv frees packets when
             // it gets them and if it frees a packet that is still in our window
             // and then it gets called again because it was dropped...Bad things happen
-            target_->recv(window[i]->copy());
+            // We need to call setupPacket to get the new destination information
+            //target_->recv(window[i]->copy());
+            setupPacket();
+            Packet* newpkt = window[i]->copy();
+            hdr_ip::access(newpkt)->daddr() = daddr();
+            hdr_ip::access(newpkt)->dport() = dport();
+            hdr_ip::access(newpkt)->saddr() = addr();
+            hdr_ip::access(newpkt)->sport() = port();
+            send(newpkt, 0);
 
             // TODO: let buddies know we retried
 
@@ -90,7 +108,21 @@ void XyzzyAgent::recordPacket(Packet* pkt, double time) {
     if (window[bufLoc_] != NULL){
         // TODO: delay somehow until there's room for another packet.
         // this is probably better handled in send
+        //
+        // For now, we'll switch to another destination if one is available
+        primaryDest->reachable = false;
+        nextDest();
+
         printf("[%d] Send buffer full, but I don't know how to wait yet!, packet lost. (seqno: %d) in the way of (seqno: %d)\n", here_.addr_, hdr_Xyzzy::access(window[bufLoc_])->seqno(), hdr_Xyzzy::access(pkt)->seqno());
+
+        printf("[%d] Trying to resend via another route\n", here_.addr_);
+        setupPacket();
+        hdr_ip::access(pkt)->daddr() = daddr();
+        hdr_ip::access(pkt)->dport() = dport();
+        hdr_ip::access(pkt)->saddr() = addr();
+        hdr_ip::access(pkt)->sport() = port();
+        send(pkt, 0);
+
     } else {
         // TODO: send to buddies
 
@@ -154,6 +186,8 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
 
 }
 
+// this function should be called before sending a packet in order to setup
+// the source and destination values in the header
 void XyzzyAgent::setupPacket(Packet* pkt){
     DestNode* dest;
     if (pkt){
@@ -202,7 +236,7 @@ void XyzzyAgent::setupPacket(Packet* pkt){
 //this function is used to add a sequence number to our list of
 //received packets when we get a new packet
 void XyzzyAgent::updateCumAck(int seqno){
-    ackListNode* usefulOne;
+    ackListNode* usefulOne = NULL;
 
     //if the list is empty we want to create a
     //new list node to be the head of the list
@@ -238,16 +272,19 @@ void XyzzyAgent::updateCumAck(int seqno){
         //once we have found the last node with a lower sequence number
         //we need to create a new node for our sequence numbe and then
         //repair the chain
-        usefulOne->next = new ackListNode;
-        usefulOne->next->next = current;
+        if (usefulOne){
+            usefulOne->next = new ackListNode;
+            usefulOne->next->next = current;
 
-        //set useful one to the new node
-        usefulOne = usefulOne->next;
+            //set useful one to the new node
+            usefulOne = usefulOne->next;
+        }
     }
 
     //set the sequence no in useful one because it is now set to the node that
     //needs to be set in either case
-    usefulOne->seqno = seqno;
+    if (usefulOne)
+        usefulOne->seqno = seqno;
 
 }
 
@@ -301,6 +338,14 @@ void XyzzyAgent::ackListPrune(){
 //A PACKET IS PASSED TO RECEIVE IT IS EITHER COPIED FOR BOOK KEEPING STRUCTURES,
 //COPIED FOR RECEIVE, OR YOU ARE HAPPY WITH IT DISSAPPEARING
 void XyzzyAgent::recv(Packet* pkt, Handler*) {
+    
+    // if the heartbeat timer isnt running, start it up...
+    if (hb_.status() == TIMER_IDLE)
+        hb_.sched(HB_INTERVAL);
+    else if (hb_.status() == TIMER_PENDING){
+    } else {
+        hb_.resched(HB_INTERVAL);
+    }
 
     //get the header out of the packet we just got
     hdr_Xyzzy* oldHdr = hdr_Xyzzy::access(pkt);
@@ -324,6 +369,9 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         //of the list...we don't need them any more
         updateCumAck(oldHdr->seqno());
         ackListPrune();
+
+        if (pkt->userdata())
+            printf("[%d] Received payload of size %d\n", here_.addr_, pkt->userdata()->size());
 
         //create a new protocol specific header for the packet
         hdr_Xyzzy* newHdr = hdr_Xyzzy::access(ap);
@@ -368,9 +416,6 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
             app_->process_data(hdr_cmn::access(pkt)->size(), pkt->userdata());
         }
 
-        if (pkt->userdata())
-            printf("[%d] Received payload of size %d\n", here_.addr_, pkt->userdata()->size());
-
     //if the packet was an ack
     } else if (oldHdr->type() == T_ack) {
         //need to find the packet that was acked in our window
@@ -397,6 +442,43 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                 }
             }
         }
+    
+    // if this is a heartbeat message
+    } else if (oldHdr->type() == T_heartbeat) {
+        // check whether this is a response
+        if(oldHdr->heartbeat() > 0){
+            // send back a response
+            
+            setupPacket(pkt);
+            Packet* ap = allocpkt();
+
+            //set up its common header values ie protocol type and size of data
+            hdr_cmn::access(ap)->ptype() = PT_XYZZY;
+            hdr_cmn::access(ap)->size() = sizeof(hdr_Xyzzy);
+
+            //create a new protocol specific header for the packet
+            hdr_Xyzzy* newHdr = hdr_Xyzzy::access(ap);
+
+            //set the fields in our new header to the ones that were
+            //in the packet we just received
+            newHdr->type() = T_heartbeat;
+            newHdr->seqno() = oldHdr->seqno();
+            newHdr->heartbeat() = oldHdr->heartbeat()*-1;
+
+            printf("[%d] I'm not dead yet! (hb:%d)\n", here_.addr_, newHdr->heartbeat());
+
+            // set up ip header
+            hdr_ip* newip = hdr_ip::access(ap);
+            hdr_ip* oldip = hdr_ip::access(pkt);
+
+            //set the ip header so that the heartbeat response packet will
+            //go back to the data packet's source
+            newip->dst() = oldip->src();
+            newip->prio() = oldip->prio();
+            newip->flowid() = oldip->flowid();
+
+            send(ap, 0);
+        }
     }
 
     //free the packet we just received
@@ -404,6 +486,61 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
     Packet::free(pkt);
 
 }
+
+
+// set primaryDest to next available ip
+void XyzzyAgent::nextDest(){
+    DestNode* current;
+    for(current = destList; current!=NULL; current = current->next){
+        if (current->reachable){
+            primaryDest = current;
+            break;
+        }
+    }
+    if(current == NULL)
+        printf("[%d] No more destination IPs!\n", here_.addr_);
+}
+
+void XyzzyAgent::heartbeat(){
+    // construct a heartbeat packet and send
+    setupPacket();
+    Packet* p = allocpkt();
+
+    //set the type and size of the packet payload
+    //in the common header
+    hdr_cmn::access(p)->ptype() = PT_XYZZY;
+    hdr_cmn::access(p)->size() = sizeof(hdr_Xyzzy);
+
+    //set the type  of our header
+    // the sequence number is -1, and the heartbeat 
+    // variable is set to the current seqno
+    // when the other host responds, it will have heartbeat*-1
+    hdr_Xyzzy::access(p)->seqno() = -1;
+    hdr_Xyzzy::access(p)->heartbeat() = seqno_;
+    hdr_Xyzzy::access(p)->type() = T_heartbeat;
+
+
+    // setup timeout timer
+    if (hbTimeout_ == NULL){
+        hbTimeout_ = new TimeoutTimer(this, &XyzzyAgent::heartbeatTimeout, (void*)primaryDest);
+        hbTimeout_->sched(0.2);
+    }
+
+    send(p, 0);
+}
+
+void XyzzyAgent::heartbeatTimeout(void* arg) {
+    DestNode* dn = (DestNode*) arg;
+
+    if (dn){
+        dn->rcount++;
+        if (dn->rcount > MAX_HB_MISS){
+            dn->reachable = false;
+        }
+    }
+    hbTimeout_ = NULL;
+}
+
 
 //This function processes commands to the agent from the TCL script
 int XyzzyAgent::command(int argc, const char*const* argv) {

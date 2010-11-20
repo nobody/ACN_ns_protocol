@@ -16,6 +16,8 @@
 
 #define WINDOW_SIZE 40
 #define RETRY_TIME 1
+#define MAX_HB_MISS 2
+#define HB_INTERVAL 0.5
 
 //this struct is used to keep a linked list of the 
 //messages for which we have received acks. we periodically
@@ -33,10 +35,12 @@ struct ackListNode{
 struct DestNode {
     int iNsAddr;
     int iNsPort;
+    bool reachable;
+    int rcount;
 
     DestNode* next;
 
-    DestNode():iNsAddr(0),iNsPort(0),next(NULL){}
+    DestNode():iNsAddr(0),iNsPort(0),reachable(true),rcount(0),next(NULL){}
 };
 
 // this is used to maintain the list of interfaces we have available
@@ -53,7 +57,7 @@ struct IfaceNode {
 
 //these are the types of headers our protocol uses
 
-enum Xyzzy_header_types { T_normal, T_ack };
+enum Xyzzy_header_types { T_normal, T_ack, T_heartbeat };
 
 //this is the header struct
 //it contains functions and varibles 
@@ -64,12 +68,14 @@ struct hdr_Xyzzy {
     int seqno_;
     int type_;
     int cumAck_;
+    int heartbeat_;
     
     /* per-field member functions */
     int& srcid() { return (srcid_); }
     int& seqno() { return (seqno_); }
     int& type() { return (type_); }
     int& cumAck() { return (cumAck_); }
+    int& heartbeat() { return (heartbeat_); }
 
     /* Packet header access functions */
     static int offset_;
@@ -90,12 +96,34 @@ class RetryTimer : public TimerHandler {
     XyzzyAgent* t_;
 };
 
+class HeartbeatTimer : public TimerHandler {
+    public:
+        HeartbeatTimer(XyzzyAgent* t) : TimerHandler(), t_(t) {}
+        virtual void expire(Event*);
+    protected:
+        XyzzyAgent* t_;
+};
+
+// Generic Timeout Timer. 
+// Given a function pointer with signature void fn(void*) and a void*,
+// it will call the function with the given argument when it expires
+class TimeoutTimer : public TimerHandler {
+    public:
+        TimeoutTimer(XyzzyAgent* t, void(XyzzyAgent::*fn)(void*), void* arg) : TimerHandler(), t_(t), fn_(fn), arg_(arg) {}
+        virtual void expire(Event*);
+    protected:
+        XyzzyAgent* t_;
+        void(XyzzyAgent::*fn_)(void *);
+        void* arg_;
+};
+
 //this is our actuall agent class our actuall protocol
 //for more specifics on how methods work and what they are
 //used for look at the .cc file
 class XyzzyAgent : public Agent {
     public:
-        friend class CheckBufferTimer;
+        friend class HeartbeatTimer;
+        friend class TimeoutTimer;
         XyzzyAgent();
         XyzzyAgent(packet_t);
         virtual void sendmsg(int nbytes, AppData* data, const char *flags = 0);
@@ -155,10 +183,19 @@ class XyzzyAgent : public Agent {
 
         // the primary destination
         DestNode* primaryDest;
+
+        // set primary destination to next available
+        void nextDest();
+
+        // Send a heartbeat to the active node and set up a timeout timer
+        void heartbeat();
+        void heartbeatTimeout(void*);
+        TimeoutTimer* hbTimeout_;
     protected:
         double CHECK_BUFFER_INT;
         double MAXDELAY;
         RetryTimer retry_;
+        HeartbeatTimer hb_;
 };
 
 
