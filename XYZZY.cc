@@ -1,5 +1,15 @@
 #include "XYZZY/XYZZY.h"
 
+#define C_NORMAL    "\033[0m"
+#define C_BALCK     "\033[0;30m"
+#define C_RED       "\033[0;31m"
+#define C_GREEN     "\033[0;32m"
+#define C_YELLOW    "\033[0;33m"
+#define C_BLUE      "\033[0;34m"
+#define C_PURPLE    "\033[0;35m"
+#define C_CYAN      "\033[0;36m"
+#define C_WHITE     "\033[0;37m"
+
 int hdr_Xyzzy::offset_;
 
 
@@ -66,10 +76,10 @@ void XyzzyAgent::retryPackets() {
     //each packet in our window was sent, if more thatn the RETRY_TIME
     //has elapsed we want to send it again
     double timeNow = Scheduler::instance().clock();
-    printf("[%d] Starting retry loop at %f\n", here_.addr_, timeNow);
+    printf(C_RED "[%d] Starting retry loop at %f\n" C_NORMAL, here_.addr_, timeNow);
     for (int i = 0; i < WINDOW_SIZE; ++i) {
         if (window[i] != NULL && timeNow - timeSent[i] > RETRY_TIME) {
-            printf("[%d] ** RETRYING PACKET %d **\n", here_.addr_, hdr_Xyzzy::access(window[i])->seqno());
+            printf(C_RED "[%d] ** RETRYING PACKET %d **\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(window[i])->seqno());
 
             // send again.
             // this needs to be copied here because recv frees packets when
@@ -101,7 +111,7 @@ void XyzzyAgent::retryPackets() {
         retry_.cancel();
     }
     retry_.resched(RETRY_TIME);
-    printf("[%d] Ending retry loop at %f\n", here_.addr_, timeNow);
+    printf(C_RED "[%d] Ending retry loop at %f\n" C_NORMAL, here_.addr_, timeNow);
 }
 
 void XyzzyAgent::recordPacket(Packet* pkt, double time) {
@@ -113,9 +123,8 @@ void XyzzyAgent::recordPacket(Packet* pkt, double time) {
         primaryDest->reachable = false;
         nextDest();
 
-        printf("[%d] Send buffer full, but I don't know how to wait yet!, packet lost. (seqno: %d) in the way of (seqno: %d)\n", here_.addr_, hdr_Xyzzy::access(window[bufLoc_])->seqno(), hdr_Xyzzy::access(pkt)->seqno());
+        printf(C_BLUE "[%d] Trying to resend via another route!  packet lost. (seqno: %d) in the way of (seqno: %d)\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(window[bufLoc_])->seqno(), hdr_Xyzzy::access(pkt)->seqno());
 
-        printf("[%d] Trying to resend via another route\n", here_.addr_);
         setupPacket();
         hdr_ip::access(pkt)->daddr() = daddr();
         hdr_ip::access(pkt)->dport() = dport();
@@ -137,7 +146,7 @@ void XyzzyAgent::recordPacket(Packet* pkt, double time) {
         //past the bounds of the array
         bufLoc_++;
         bufLoc_ %= WINDOW_SIZE;
-        printf("[%d]  New buffer location: %d\n", here_.addr_, bufLoc_);
+        printf(C_GREEN "[%d]  New buffer location: %d for pkt %d\n" C_NORMAL, here_.addr_, bufLoc_, hdr_Xyzzy::access(pkt)->seqno());
     }
 }
 
@@ -160,7 +169,7 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
 
     //if the maximum packet size is zero...somthing has gone terribly wrong
     if (size_ == 0)
-        printf("[%d] Xyzzy size_ is 0!\n", here_.addr_);
+        printf(C_RED "[%d] Xyzzy size_ is 0!\n" C_NORMAL, here_.addr_);
 
     //this will eventually handle fragmentation
     if (data && nbytes > size_) {
@@ -371,9 +380,6 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         updateCumAck(oldHdr->seqno());
         ackListPrune();
 
-        if (pkt->userdata())
-            printf("[%d] Received payload of size %d\n", here_.addr_, pkt->userdata()->size());
-
         //create a new protocol specific header for the packet
         hdr_Xyzzy* newHdr = hdr_Xyzzy::access(ap);
 
@@ -382,7 +388,11 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         newHdr->type() = T_ack;
         newHdr->seqno() = oldHdr->seqno();
         newHdr->cumAck() = ackList->seqno;
-        printf("[%d] Generating ack for seqno %d (cumAck: %d)\n", here_.addr_, newHdr->seqno(), newHdr->cumAck());
+
+        if (pkt->userdata())
+            printf(C_CYAN "[%d] Generating ack for seqno %d (cumAck: %d).  Received payload of size %d\n" C_NORMAL, here_.addr_, newHdr->seqno(), newHdr->cumAck(), pkt->userdata()->size());
+        else
+            printf(C_CYAN "[%d] Generating ack for seqno %d (cumAck: %d)\n" C_NORMAL, here_.addr_, newHdr->seqno(), newHdr->cumAck());
 
         // set up ip header
         hdr_ip* newip = hdr_ip::access(ap);
@@ -428,7 +438,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
 
                 //and its sequence number is == to the one packet we just got
                 if (hdr->seqno() == oldHdr->seqno()){
-                    printf("[%d] Got an ack for %d and marking the packet in the buffer.\n", here_.addr_, oldHdr->seqno());
+                    printf(C_CYAN "[%d] Got an ack for %d and marking the packet in the buffer.\n" C_NORMAL, here_.addr_, oldHdr->seqno());
                     // found it, delete the packet
                     Packet::free(window[i]);
                     window[i] = NULL;
@@ -437,7 +447,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                 //if the packet is less than the cumulative ack that came in
                 //on the newest packet we can dump it too while were at it.
                 } else if(hdr->seqno() < oldHdr->cumAck()) {
-                    printf("[%d] Got a cumAck for %d and marking the packet %d in the buffer.\n", here_.addr_, oldHdr->cumAck(), hdr->seqno());
+                    printf(C_CYAN "[%d] Got a cumAck for %d and marking the packet %d in the buffer.\n" C_NORMAL, here_.addr_, oldHdr->cumAck(), hdr->seqno());
                     Packet::free(window[i]);
                     window[i] = NULL;
                 }
@@ -466,7 +476,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
             newHdr->seqno() = oldHdr->seqno();
             newHdr->heartbeat() = oldHdr->heartbeat()*-1;
 
-            printf("[%d] I'm not dead yet! (hb:%d)\n", here_.addr_, newHdr->heartbeat());
+            printf(C_PURPLE "[%d] I'm not dead yet! (hb:%d)\n" C_NORMAL, here_.addr_, newHdr->heartbeat());
 
             // set up ip header
             hdr_ip* newip = hdr_ip::access(ap);
@@ -507,7 +517,7 @@ void XyzzyAgent::nextDest(){
         }
     }
     if(current == NULL)
-        printf("[%d] No more destination IPs!\n", here_.addr_);
+        printf(C_YELLOW "[%d] No more destination IPs!\n" C_NORMAL, here_.addr_);
 }
 
 void XyzzyAgent::heartbeat(){
@@ -571,7 +581,7 @@ int XyzzyAgent::command(int argc, const char*const* argv) {
         
         // see if the dest is in the list and make it the primary
         if (destList == NULL){
-            printf("[%d] Trying to set primary dest when there are no destinations\n", here_.addr_);
+            printf(C_YELLOW "[%d] Trying to set primary dest when there are no destinations\n" C_NORMAL, here_.addr_);
             return (TCL_ERROR);
         }
 
