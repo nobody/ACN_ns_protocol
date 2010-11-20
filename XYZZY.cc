@@ -30,6 +30,9 @@ void RetryTimer::expire(Event*){
     t_->retryPackets();
 }
 
+void BuddyTimer::expire(Event*){
+    t_->sendBuddydHeartBeats();
+}
 //this is the constructor, it creates the super and the 
 //retry timer in the initialization statments
 XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY), retry_(this)
@@ -373,6 +376,16 @@ int XyzzyAgent::command(int argc, const char*const* argv) {
     return Agent::command(argc, argv);
 }
 
-
+void XyzzyAgent::sendBuddyHeartBeats(){
+    //build heart beat packets and loop 
+    //over buddies sending them to the first 
+    //interface
+}
+void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
+    //this will loop over the buddies and send the packet I
+    //just sent/received to them.  Not sure how the multiple interface
+    //thing works so not sure how buddy will know where 
+    //it came from /shrug
+}
 
 /* vi: set tabstop=4 softtabstop=4 shiftwidth=4 expandtab : */

@@ -16,6 +16,13 @@
 #define WINDOW_SIZE 40
 #define RETRY_TIME 0.1
 
+#define B_DEAD 0
+#define B_ACTIVE 1
+#define B_LEADING 2
+
+#define B_SENT 0
+#define B_RCVD 1
+
 //this struct is used to keep a linked list of the 
 //messages for which we have received acks. we periodically
 //cull all sequential messages from the front of the list
@@ -28,9 +35,15 @@ struct ackListNode{
     ackListNode():seqno(0),next(NULL){}
 };
 
+struct buddyNode{
+    int id;
+    int status;
+    int missedHBS;
+};
+
 //these are the types of headers our protocol uses
 
-enum Xyzzy_header_types { T_normal, T_ack };
+enum Xyzzy_header_types { T_normal, T_ack, T_buddy, T_beat};
 
 //this is the header struct
 //it contains functions and varibles 
@@ -41,12 +54,14 @@ struct hdr_Xyzzy {
     int seqno_;
     int type_;
     int cumAck_;
+    char sndRcv_;
     
     /* per-field member functions */
     int& srcid() { return (srcid_); }
     int& seqno() { return (seqno_); }
     int& type() { return (type_); }
     int& cumAck() { return (cumAck_); }
+    char& sndRcv() {return (sndRcv_); }
 
     /* Packet header access functions */
     static int offset_;
@@ -67,6 +82,15 @@ class RetryTimer : public TimerHandler {
     XyzzyAgent* t_;
 };
 
+//timer to fire heartbeats to buddies
+class BuddyTimer : public TimerHandler{
+    public:
+        BuddyTimer(XyzzyAgent* t) : TimerHandler(), t_(t){}
+        virtual void expire(Event*);
+    protected:
+        XyzzyAgent* t_;
+};
+
 //this is our actuall agent class our actuall protocol
 //for more specifics on how methods work and what they are
 //used for look at the .cc file
@@ -82,6 +106,7 @@ class XyzzyAgent : public Agent {
         virtual void recv(Packet* pkt, Handler*);
         virtual int command(int argc, const char*const* argv);
         void retryPackets();
+        void sendBuddyHeartBeats();
     private:
         //our present sequence number
         int seqno_;
@@ -109,6 +134,15 @@ class XyzzyAgent : public Agent {
 
         //the head of linked list of received packets
         ackListNode* ackList;
+
+        //buddy stuff
+        void forwardToBuddies(Packet*, char);
+
+        bool isActiveBuddy;
+        int activeBuddyID_;
+        buddyNode* buddies;
+        int numOfBuddies_;
+
     protected:
         double CHECK_BUFFER_INT;
         double MAXDELAY;
