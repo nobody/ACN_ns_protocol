@@ -19,6 +19,14 @@
 #define MAX_HB_MISS 2
 #define HB_INTERVAL 0.5
 
+#define B_DEAD 0
+#define B_ACTIVE 1
+#define B_LEADING 2
+
+#define B_SENT 0
+#define B_RCVD 1
+
+
 class HeartbeatTimer;
 class TimeoutTimer;
 
@@ -34,6 +42,11 @@ struct ackListNode{
     ackListNode():seqno(0),next(NULL){}
 };
 
+struct buddyNode{
+    int id;
+    int status;
+    int missedHBS;
+};
 // this struct is used to maintain information about destination ips.
 struct DestNode {
     int iNsAddr;
@@ -63,7 +76,7 @@ struct IfaceNode {
 
 //these are the types of headers our protocol uses
 
-enum Xyzzy_header_types { T_normal, T_ack, T_heartbeat };
+enum Xyzzy_header_types { T_normal, T_ack, T_heartbeat, T_buddy, T_beat };
 
 //this is the header struct
 //it contains functions and varibles 
@@ -74,6 +87,7 @@ struct hdr_Xyzzy {
     int seqno_;
     int type_;
     int cumAck_;
+    char sndRcv_;
     int heartbeat_;
     
     /* per-field member functions */
@@ -81,6 +95,7 @@ struct hdr_Xyzzy {
     int& seqno() { return (seqno_); }
     int& type() { return (type_); }
     int& cumAck() { return (cumAck_); }
+    char& sndRcv() {return (sndRcv_); }
     int& heartbeat() { return (heartbeat_); }
 
     /* Packet header access functions */
@@ -100,6 +115,15 @@ class RetryTimer : public TimerHandler {
     virtual void expire(Event*);
     protected:
     XyzzyAgent* t_;
+};
+
+//timer to fire heartbeats to buddies
+class BuddyTimer : public TimerHandler{
+    public:
+        BuddyTimer(XyzzyAgent* t) : TimerHandler(), t_(t){}
+        virtual void expire(Event*);
+    protected:
+        XyzzyAgent* t_;
 };
 
 class HeartbeatTimer : public TimerHandler {
@@ -140,6 +164,7 @@ class XyzzyAgent : public Agent {
         virtual void recv(Packet* pkt, Handler*);
         virtual int command(int argc, const char*const* argv);
         void retryPackets();
+        void sendBuddyHeartBeats();
     private:
         //our present sequence number
         int seqno_;
@@ -184,6 +209,15 @@ class XyzzyAgent : public Agent {
 
         //the head of linked list of received packets
         ackListNode* ackList;
+
+        //buddy stuff
+        void forwardToBuddies(Packet*, char);
+
+        bool isActiveBuddy;
+        int activeBuddyID_;
+        buddyNode* buddies;
+        int numOfBuddies_;
+
         
         // head of the interface list
         IfaceNode* ifaceList;
