@@ -146,6 +146,15 @@ void XyzzyAgent::recordPacket(Packet* pkt, double time) {
 //to send a message over the link
 void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
 
+    // TODO: Once we have states, this should be satrted during connection initiation
+    // if the heartbeat timer isnt running, start it up...
+    if (hb_.status() == TIMER_IDLE)
+        hb_.sched(HB_INTERVAL);
+    else if (hb_.status() == TIMER_PENDING){
+    } else {
+        hb_.resched(HB_INTERVAL);
+    }
+
     //create a packet to put data in
     Packet* p;
 
@@ -339,14 +348,6 @@ void XyzzyAgent::ackListPrune(){
 //COPIED FOR RECEIVE, OR YOU ARE HAPPY WITH IT DISSAPPEARING
 void XyzzyAgent::recv(Packet* pkt, Handler*) {
     
-    // if the heartbeat timer isnt running, start it up...
-    if (hb_.status() == TIMER_IDLE)
-        hb_.sched(HB_INTERVAL);
-    else if (hb_.status() == TIMER_PENDING){
-    } else {
-        hb_.resched(HB_INTERVAL);
-    }
-
     //get the header out of the packet we just got
     hdr_Xyzzy* oldHdr = hdr_Xyzzy::access(pkt);
 
@@ -478,6 +479,14 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
             newip->flowid() = oldip->flowid();
 
             send(ap, 0);
+
+        // if we got the heartbeat and there's a timeout timer running, stop it.
+        // TODO: Expand this to check which dest this was and have separate timers per destination
+        } else if (hbTimeout_ != NULL){
+            if (hbTimeout_->status() == TIMER_PENDING)
+                hbTimeout_->cancel();
+            delete hbTimeout_;
+            hbTimeout_ = NULL;
         }
     }
 
@@ -538,6 +547,7 @@ void XyzzyAgent::heartbeatTimeout(void* arg) {
             dn->reachable = false;
         }
     }
+    delete hbTimeout_;
     hbTimeout_ = NULL;
 }
 
