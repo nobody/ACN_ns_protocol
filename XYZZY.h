@@ -19,6 +19,9 @@
 #define MAX_HB_MISS 2
 #define HB_INTERVAL 0.5
 
+class HeartbeatTimer;
+class TimeoutTimer;
+
 //this struct is used to keep a linked list of the 
 //messages for which we have received acks. we periodically
 //cull all sequential messages from the front of the list
@@ -37,10 +40,13 @@ struct DestNode {
     int iNsPort;
     bool reachable;
     int rcount;
-
+    
+    HeartbeatTimer* hb_;
+    TimeoutTimer* hbTimeout_;
     DestNode* next;
 
-    DestNode():iNsAddr(0),iNsPort(0),reachable(true),rcount(0),next(NULL){}
+    DestNode(): iNsAddr(0),iNsPort(0),reachable(true),rcount(0),
+                hb_(NULL),hbTimeout_(NULL),next(NULL) {}
 };
 
 // this is used to maintain the list of interfaces we have available
@@ -98,10 +104,11 @@ class RetryTimer : public TimerHandler {
 
 class HeartbeatTimer : public TimerHandler {
     public:
-        HeartbeatTimer(XyzzyAgent* t) : TimerHandler(), t_(t) {}
+        HeartbeatTimer(XyzzyAgent* t, DestNode* dn) : TimerHandler(), t_(t), dn_(dn) {}
         virtual void expire(Event*);
     protected:
         XyzzyAgent* t_;
+        DestNode* dn_;
 };
 
 // Generic Timeout Timer. 
@@ -161,13 +168,16 @@ class XyzzyAgent : public Agent {
         void recordPacket(Packet*, double);
 
         // set up source and dest for packet
-        void setupPacket(Packet* pkt = NULL);
+        void setupPacket(Packet* pkt = NULL, DestNode* dn = NULL);
 
         // Adds an interface to the list
         void AddInterface(int, int, NsObject*, NsObject*);
 
         // Adds a destination to the list
         void AddDestination(int, int);
+
+        // Find a destination in the list by address
+        DestNode* findDest(int);
 
         //the current cumulative ack value
         int cumAck_;
@@ -188,14 +198,14 @@ class XyzzyAgent : public Agent {
         void nextDest();
 
         // Send a heartbeat to the active node and set up a timeout timer
-        void heartbeat();
+        void heartbeat(DestNode*);
         void heartbeatTimeout(void*);
-        TimeoutTimer* hbTimeout_;
+        //TimeoutTimer* hbTimeout_;
     protected:
         double CHECK_BUFFER_INT;
         double MAXDELAY;
         RetryTimer retry_;
-        HeartbeatTimer hb_;
+        //HeartbeatTimer hb_;
 };
 
 

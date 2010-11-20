@@ -16,7 +16,7 @@ proc finish {} {
 	close $nf
 	close $tr
 
-	exec nam tmp.nam &
+	#exec nam tmp.nam &
 	exit 0
 }
 
@@ -81,8 +81,8 @@ $host1_if1 color Blue
 $ns multihome-add-interface $host1_core $host1_if0
 $ns multihome-add-interface $host1_core $host1_if1
 
-$ns duplex-link $host0_if0 $host1_if0 .5Mb 200ms DropTail
-$ns duplex-link $host0_if1 $host1_if1 .5Mb 200ms DropTail
+$ns duplex-link $host0_if0 $host1_if0 5Mb 20ms DropTail
+$ns duplex-link $host0_if1 $host1_if1 5Mb 20ms DropTail
 
 set xyzzy0 [new Agent/Xyzzy]
 $ns multihome-attach-agent $host0_core $xyzzy0
@@ -125,7 +125,8 @@ $xyzzy0 set-primary-destination $host1_if0
 #$ns at 7.5 "$xyzzy0 print cwnd_"
 
 # simulate link failure
-$ns rtmodel-at 5.0 down $host0_if0
+$ns rtmodel-at 2.0 down $host0_if0
+$ns rtmodel-at 7.0 up $host0_if0
 $ns at 0.5 "$ftp0 start"
 $ns at 10.0 "finish"
 

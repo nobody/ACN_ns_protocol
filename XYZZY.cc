@@ -42,7 +42,7 @@ void RetryTimer::expire(Event*){
 
 // send a heartbeat when the timer expires
 void HeartbeatTimer::expire(Event*){
-    t_->heartbeat();
+    t_->heartbeat(dn_);
 }
 
 // Generic timeout timer -- call the given callback function
@@ -52,7 +52,7 @@ void TimeoutTimer::expire(Event*){
 
 //this is the constructor, it creates the super and the
 //retry timer in the initialization statments
-XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY), seqno_(0), coreTarget(NULL), bufLoc_(0), hbTimeout_(NULL), retry_(this), hb_(this)
+XyzzyAgent::XyzzyAgent() : Agent(PT_XYZZY), seqno_(0), coreTarget(NULL), bufLoc_(0), retry_(this)
 {
     //bind the varible to a Tcl varible
     bind("packetSize_", &size_);
@@ -157,11 +157,16 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
 
     // TODO: Once we have states, this should be satrted during connection initiation
     // if the heartbeat timer isnt running, start it up...
-    if (hb_.status() == TIMER_IDLE)
-        hb_.sched(HB_INTERVAL);
-    else if (hb_.status() == TIMER_PENDING){
+    if (primaryDest->hb_){
+        if (primaryDest->hb_->status() == TIMER_IDLE)
+            primaryDest->hb_->sched(HB_INTERVAL);
+        else if (primaryDest->hb_->status() == TIMER_PENDING){
+        } else {
+            primaryDest->hb_->resched(HB_INTERVAL);
+        }
     } else {
-        hb_.resched(HB_INTERVAL);
+        primaryDest->hb_ = new HeartbeatTimer(this, primaryDest);
+        primaryDest->hb_->sched(HB_INTERVAL);
     }
 
     //create a packet to put data in
@@ -206,7 +211,7 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
 
 // this function should be called before sending a packet in order to setup
 // the source and destination values in the header
-void XyzzyAgent::setupPacket(Packet* pkt){
+void XyzzyAgent::setupPacket(Packet* pkt, DestNode* dn){
     DestNode* dest;
     if (pkt){
         // find the dest node matching the source in this packet
@@ -221,6 +226,8 @@ void XyzzyAgent::setupPacket(Packet* pkt){
         }
         if (dest == NULL)
             dest = primaryDest;
+    } else if (dn) {
+        dest = dn;
     } else {
         dest = primaryDest;
     }
@@ -476,7 +483,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
             newHdr->seqno() = oldHdr->seqno();
             newHdr->heartbeat() = oldHdr->heartbeat()*-1;
 
-            printf(C_PURPLE "[%d] I'm not dead yet! (hb:%d)\n" C_NORMAL, here_.addr_, newHdr->heartbeat());
+            printf(C_PURPLE "[%d] I'm not dead yet! (hb:%d, dest:%d)\n" C_NORMAL, here_.addr_, newHdr->heartbeat(), hdr_ip::access(ap)->daddr());
 
             // set up ip header
             hdr_ip* newip = hdr_ip::access(ap);
@@ -492,11 +499,21 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
 
         // if we got the heartbeat and there's a timeout timer running, stop it.
         // TODO: Expand this to check which dest this was and have separate timers per destination
-        } else if (hbTimeout_ != NULL){
-            if (hbTimeout_->status() == TIMER_PENDING)
-                hbTimeout_->cancel();
-            delete hbTimeout_;
-            hbTimeout_ = NULL;
+        } else {
+            DestNode* dest = findDest(hdr_ip::access(pkt)->saddr());
+            if (dest){
+                printf(C_PURPLE "[%d] 'Ere, he says he's not dead. (hb:%d, dest:%d)\n" C_NORMAL, here_.addr_, oldHdr->heartbeat(), dest->iNsAddr);
+                if (dest->hbTimeout_ != NULL){
+                    if (dest->hbTimeout_->status() == TIMER_PENDING)
+                        dest->hbTimeout_->cancel();
+                    delete dest->hbTimeout_;
+                    dest->hbTimeout_ = NULL;
+                }
+                dest->reachable = true;
+                dest->rcount = 0;
+            } else {
+                printf(C_PURPLE "[%d] Got a heartbeat from someone I don't know... (hb:%d, dest:%d)\n" C_NORMAL, here_.addr_, oldHdr->heartbeat(), hdr_ip::access(pkt)->saddr());
+            }
         }
     }
 
@@ -520,9 +537,19 @@ void XyzzyAgent::nextDest(){
         printf(C_YELLOW "[%d] No more destination IPs!\n" C_NORMAL, here_.addr_);
 }
 
-void XyzzyAgent::heartbeat(){
+DestNode* XyzzyAgent::findDest(int addr) {
+    for(DestNode* current = destList; current != NULL; current = current->next){
+        if (current->iNsAddr == addr)
+            return current;
+    }
+    return NULL;
+}
+
+void XyzzyAgent::heartbeat(DestNode* dest){
+    //DestNode* dest = primaryDest;
+
     // construct a heartbeat packet and send
-    setupPacket();
+    setupPacket(NULL, dest);
     Packet* p = allocpkt();
 
     //set the type and size of the packet payload
@@ -540,11 +567,12 @@ void XyzzyAgent::heartbeat(){
 
 
     // setup timeout timer
-    if (hbTimeout_ == NULL){
-        hbTimeout_ = new TimeoutTimer(this, &XyzzyAgent::heartbeatTimeout, (void*)primaryDest);
-        hbTimeout_->sched(0.2);
+    if (dest->hbTimeout_ == NULL){
+        dest->hbTimeout_ = new TimeoutTimer(this, &XyzzyAgent::heartbeatTimeout, (void*)dest);
+        dest->hbTimeout_->sched(0.2);
     }
 
+    printf(C_PURPLE "[%d] Bring out yer dead! (hb:%d, dest:%d)\n" C_NORMAL, here_.addr_, seqno_, dest->iNsAddr);
     send(p, 0);
 }
 
@@ -553,12 +581,28 @@ void XyzzyAgent::heartbeatTimeout(void* arg) {
 
     if (dn){
         dn->rcount++;
+        printf(C_PURPLE "[%d] No you're not, you'll be stone dead in a moment. (hb:%d, rcount:%d, dest: %d)\n" C_NORMAL, here_.addr_, seqno_, dn->rcount, dn->iNsAddr);
         if (dn->rcount > MAX_HB_MISS){
             dn->reachable = false;
+            nextDest();
+            printf(C_YELLOW "[%d] New destination: %d\n" C_NORMAL, here_.addr_, primaryDest->iNsAddr);
+
+            // schedule another heartbeat 
+            if (dn->hb_){
+                if (dn->hb_->status() == TIMER_IDLE)
+                    dn->hb_->sched(HB_INTERVAL);
+                else if (dn->hb_->status() == TIMER_PENDING){
+                } else {
+                    dn->hb_->resched(HB_INTERVAL);
+                }
+            } else {
+                dn->hb_ = new HeartbeatTimer(this, dn);
+                dn->hb_->sched(HB_INTERVAL);
+            }
         }
     }
-    delete hbTimeout_;
-    hbTimeout_ = NULL;
+    delete dn->hbTimeout_;
+    dn->hbTimeout_ = NULL;
 }
 
 
