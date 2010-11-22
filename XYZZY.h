@@ -14,8 +14,18 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#define C_NORMAL    "\033[0m"
+#define C_BALCK     "\033[0;30m"
+#define C_RED       "\033[0;31m"
+#define C_GREEN     "\033[0;32m"
+#define C_YELLOW    "\033[0;33m"
+#define C_BLUE      "\033[0;34m"
+#define C_PURPLE    "\033[0;35m"
+#define C_CYAN      "\033[0;36m"
+#define C_WHITE     "\033[0;37m"
+
 #define WINDOW_SIZE 40
-#define RETRY_TIME 1
+#define RETRY_TIME 0.25
 #define MAX_HB_MISS 2
 #define HB_INTERVAL 0.5
 
@@ -43,9 +53,13 @@ struct ackListNode{
 };
 
 struct buddyNode{
-    int id;
+    int iNsAddr;
     int status;
     int missedHBS;
+
+    buddyNode* next;
+
+    buddyNode() : iNsAddr(0), next(NULL) {}
 };
 // this struct is used to maintain information about destination ips.
 struct DestNode {
@@ -76,7 +90,9 @@ struct IfaceNode {
 
 //these are the types of headers our protocol uses
 
-enum Xyzzy_header_types { T_normal, T_ack, T_heartbeat, T_buddy, T_beat };
+enum Xyzzy_header_types { T_init, T_initack, T_normal, T_ack, T_heartbeat, T_buddy, T_beat };
+
+enum Xyzzy_states { STATE_NO_CONN, STATE_ASSOCIATING, STATE_ASSOCIATED };
 
 //this is the header struct
 //it contains functions and varibles 
@@ -155,6 +171,7 @@ class XyzzyAgent : public Agent {
     public:
         friend class HeartbeatTimer;
         friend class TimeoutTimer;
+        friend class BuddyTimer;
         XyzzyAgent();
         XyzzyAgent(packet_t);
         virtual void sendmsg(int nbytes, AppData* data, const char *flags = 0);
@@ -166,29 +183,37 @@ class XyzzyAgent : public Agent {
         void retryPackets();
         void sendBuddyHeartBeats();
     private:
+        // Agent state
+        int state_;
+        int init_;
+        
         //our present sequence number
         int seqno_;
         Classifier* coreTarget;
 
         //thes packets govern our retransmission of packets
-        //window is where packets are stored until they are acked
+        //sndWindow is where packets are stored until they are acked
         //numTries is where we record how many times we have tried 
         //to resend the packet
         //timeSent is a time stamp so we know when to try to resend
         //a packet
-        Packet *window[WINDOW_SIZE];
+        Packet *sndWindow[WINDOW_SIZE];
         double numTries[WINDOW_SIZE];
         double timeSent[WINDOW_SIZE];
 
-        //this keeps track of the head of the window buffer since
+        //this keeps track of the head of the sndWindow buffer since
         //it is a circular buffer
-        int bufLoc_;
+        int sndBufLoc_;
+
+        //circular buffer for receiver
+        Packet* rcvWindow[WINDOW_SIZE];
+        int rcvBufLoc_;
 
         //the following 2 functions maintain the ackList
         void updateCumAck(int);
         void ackListPrune();
 
-        // this records packet information in the window, numTries,
+        // this records packet information in the sndWindow, numTries,
         // and timeSent arrays
         void recordPacket(Packet*, double);
 
@@ -221,6 +246,7 @@ class XyzzyAgent : public Agent {
         
         // head of the interface list
         IfaceNode* ifaceList;
+        int numIfaces_;
 
         // head of the destination list
         DestNode* destList;
