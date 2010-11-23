@@ -53,7 +53,9 @@ XyzzyAgent::XyzzyAgent() :
         coreTarget(NULL),
         sndBufLoc_(0),
         rcvBufLoc_(0),
-        retry_(this)
+        retry_(this),
+        rcvNextExpected(0);
+        rcvHighestReceived(0);
 {
     //bind the varible to a Tcl varible
     bind("packetSize_", &size_);
@@ -141,7 +143,8 @@ void XyzzyAgent::recordPacket(Packet* pkt, double time) {
         send(pkt, 0);
 
     } else {
-        // TODO: send to buddies
+        //send to buddies
+        forwardToBuddies(pkt, B_RCVD);
 
         //store the packet we just sent in the
         //sndWindow and set all the relevant varibles
@@ -458,6 +461,10 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                 //in the packet we just received
                 initHdr->type() = T_initack;
                 initHdr->seqno() = oldHdr->seqno();
+
+                //save the first seqno()
+                rcvHighestReceived = oldHdr->seqno();
+                rcvNextExpected = rcvHighestReceived + 1;
                 // generate random number and save it for comparison
                 initHdr->cumAck() = init_ = rand();
 
@@ -545,13 +552,26 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
     if (oldHdr->type() == T_normal){
 
         // Determine if we have room for this in the buffer
-        /*if (oldHdr->seqno() % WINDOW_SIZE > rcvBufLoc_){
+        //
+        //Packet == NE > HR ... or anything else;
+        //we have room in the buffer;
+        if(oldHdr->seqno() == rcvNextExpected){
+
+        }
+        // HR > packet >=   NE 
+        else if(oldHdr->seqno() < rcvHighestReceived && oldHdr->seqno() >= rcvNextExpected){
+            
+        //packet > HR > NE
+        }else if(rcvHighestReceived > rcvNextExpected && oldHdr->seqno() >  rcvHighestReceived){
+
+        }else if(){
+        }else{
             printf(C_RED "[%d] Receive window full, dropping packet %d\n" C_NORMAL, here_.addr_, oldHdr->seqno());
             return;
         }
 
         rcvWindow[oldHdr->seqno() % WINDOW_SIZE] = pkt->copy();
-        */
+        
 
         // Send back an ack, so allocate a packet
         setupPacket(pkt);
@@ -860,12 +880,40 @@ void XyzzyAgent::sendBuddyHeartBeats(){
     //build heart beat packets and loop 
     //over buddies sending them to the first 
     //interface
+    
+    //build heartbeat packet
+
+    //loop over buddies
+    buddyNode* currentBuddy = buddies;
+    while(currentBuddy){
+        currentBuddy = currentBuddy->next;
+    }
+
+
 }
 void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
     //this will loop over the buddies and send the packet I
     //just sent/received to them.  Not sure how the multiple interface
     //thing works so not sure how buddy will know where 
     //it came from /shrug
+    
+    Packet pkt* = p->copy();
+
+    hdr_Xyzzy::access(pkt)->sndRcv() = sndRcv;
+
+    buddyNode* currentBuddy = buddies;
+
+    while(currentBuddy){
+
+        //needs to grab the active interface for a buddy
+        //setup to send the packet and then copy it to the buddy
+
+
+        currentBuddy = currentBuddy->next;
+    }
+
+    pkt->free();
+
 }
 // Add an interface to the interface list
 void XyzzyAgent::AddInterface(int iNsAddr, int iNsPort,
