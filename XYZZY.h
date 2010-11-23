@@ -211,6 +211,8 @@ class XyzzyAgent : public Agent {
         int rcvNextExpected;
         int rcvHighestReceived;
 
+        void sndPktToApp();
+
         //the following 2 functions maintain the ackList
         void updateCumAck(int);
         void ackListPrune();

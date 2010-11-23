@@ -556,21 +556,51 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         //Packet == NE > HR ... or anything else;
         //we have room in the buffer;
         if(oldHdr->seqno() == rcvNextExpected){
+            int tmp = oldHdr->seqno() % WINDOW_SIZE
+            rcvWindow[tmp] = pkt->copy();
+
+            //if this is the new highes packet...fix that
+            if(oldHdr->seqno() >  rcvHighestReceived )
+                ++rcvHighestReceived ;
+            //need to figure out how to move next expected forward...
+            /*for(rcvNextExpected; rcvNextExpected < rcvHighestReceived + 1; ++rcvNextExpected){
+                if(rcvWindow[rcvNextExpected % WINDOW_SIZE] == NULL)
+                    break;
+            }*/
 
         }
         // HR > packet >=   NE 
-        else if(oldHdr->seqno() < rcvHighestReceived && oldHdr->seqno() >= rcvNextExpected){
+        else if(oldHdr->seqno() < rcvHighestReceived && oldHdr->seqno() > rcvNextExpected){
+
+            //see if the space in the buffer is empty...
+            if(rcvWindow[oldHdr->seqno() % WINDOW_SIZE] == NULL){
+                rcvWindow[oldHdr->seqno() % WINDOW_SIZE] = pkt->copy();
+
+            //uh oh there is a packet there with the wrong sequnce number, this shouldn't happen...
+            }else if(hdr_Xyzzy::access(rcvWindow[oldHdr->seqno() % WINDOW_SIZE])->seqno() != oldhdr->seqno()){
+                 printf(C_RED "[%d] Receive window has packet with different seqno, 
+                         dropping packet %d, this shouldn't happen, misbehaving packet is %d\n" C_NORMAL,
+                         here_.addr_, oldHdr->seqno(), hdr_Xyzzy::access(rcvWindow[oldHdr->seqno() % WINDOW_SIZE])->seqno());
+            }
+
+            //else we already have it and should just ack it again...
+
             
         //packet > HR > NE
         }else if(rcvHighestReceived > rcvNextExpected && oldHdr->seqno() >  rcvHighestReceived){
+            
+            //This should wraparounds right
+            if(oldhdr->seqno() >=  rcvNextExpected + WINDOW_SIZE){
+                printf(C_RED "[%d] Receive window full (wrap around), dropping packet %d\n" C_NORMAL, here_.addr_, oldHdr->seqno());
+                return;
+            }
 
-        }else if(){
+        //}else if(){
         }else{
             printf(C_RED "[%d] Receive window full, dropping packet %d\n" C_NORMAL, here_.addr_, oldHdr->seqno());
             return;
         }
 
-        rcvWindow[oldHdr->seqno() % WINDOW_SIZE] = pkt->copy();
         
 
         // Send back an ack, so allocate a packet
@@ -632,9 +662,12 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         fclose(lf);
 
         // Forward data on to application.
-        if (app_) {
+        /*if (app_) {
             app_->process_data(hdr_cmn::access(pkt)->size(), pkt->userdata());
-        }
+        }*/
+
+        //pump a packet from the buffer
+        sndPktToApp();
 
     //if the packet was an ack
     } else if (oldHdr->type() == T_ack) {
@@ -946,5 +979,36 @@ void XyzzyAgent::AddDestination(int iNsAddr, int iNsPort) {
     destList = newDest;
 }
 
+//sends a packet in the rcv buffer to the listening app
+void XyzzyAgent::sndPktToApp(){
+    if(rcvWindow[rcvNextExpected % WINDOW_SIZE] == NULL)
+        return;
+    else{
+          Packet* p = rcvWindow[rcvNextExpected % WINDOW_SIZE];
+          rcvWindow[rcvNextExpected % WINDOW_SIZE] = NULL;
+            
+          char fname[13];  
+          snprintf(fname, 12, "%d-pssd.log", this->addr());
+          FILE* lf = fopen(fname, "a");
+            
+          if (pkt->userdata()){  
+              PacketData* data = (PacketData*)pkt->userdata();
+              fwrite(data->data(), data->size(), 1, lf);
+          } else
+              fwrite("NULL Data ", 9, 1, lf);
+          fwrite("\n\n\n", 2, 1, lf);
+          fclose(lf);
+
+          //pass it to an app if there is one
+          
+        if (app_) {
+            app_->process_data(hdr_cmn::access(pkt)->size(), pkt->userdata());
+        }
+
+        p->free();
+
+        ++rcvNextExpected;
+    }
+}
 
 /* vi: set tabstop=4 softtabstop=4 shiftwidth=4 expandtab : */
