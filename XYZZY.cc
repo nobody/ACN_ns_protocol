@@ -55,7 +55,9 @@ XyzzyAgent::XyzzyAgent() :
         coreTarget(NULL),
         sndBufLoc_(0),
         rcvBufLoc_(0),
-        retry_(this)
+        retry_(this),
+        rcvNextExpected(0);
+        rcvHighestReceived(0);
 {
     //bind the varible to a Tcl varible
     bind("packetSize_", &size_);
@@ -151,7 +153,8 @@ bool XyzzyAgent::recordPacket(Packet* pkt, double time) {
         
         return false;
     } else {
-        // TODO: send to buddies
+        //send to buddies
+        forwardToBuddies(pkt, B_RCVD);
 
         //store the packet we just sent in the
         //sndWindow and set all the relevant varibles
@@ -476,6 +479,10 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                 //in the packet we just received
                 initHdr->type() = T_initack;
                 initHdr->seqno() = oldHdr->seqno();
+
+                //save the first seqno()
+                rcvHighestReceived = oldHdr->seqno();
+                rcvNextExpected = rcvHighestReceived + 1;
                 // generate random number and save it for comparison
                 initHdr->cumAck() = init_ = rand();
 
@@ -563,13 +570,56 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
     if (oldHdr->type() == T_normal){
 
         // Determine if we have room for this in the buffer
-        /*if (oldHdr->seqno() % WINDOW_SIZE > rcvBufLoc_){
+        //
+        //Packet == NE > HR ... or anything else;
+        //we have room in the buffer;
+        if(oldHdr->seqno() == rcvNextExpected){
+            int tmp = oldHdr->seqno() % WINDOW_SIZE
+            rcvWindow[tmp] = pkt->copy();
+
+            //if this is the new highes packet...fix that
+            if(oldHdr->seqno() >  rcvHighestReceived )
+                ++rcvHighestReceived ;
+            //need to figure out how to move next expected forward...
+            /*for(rcvNextExpected; rcvNextExpected < rcvHighestReceived + 1; ++rcvNextExpected){
+                if(rcvWindow[rcvNextExpected % WINDOW_SIZE] == NULL)
+                    break;
+            }*/
+
+        }
+        // HR > packet >=   NE 
+        else if(oldHdr->seqno() < rcvHighestReceived && oldHdr->seqno() > rcvNextExpected){
+
+            //see if the space in the buffer is empty...
+            if(rcvWindow[oldHdr->seqno() % WINDOW_SIZE] == NULL){
+                rcvWindow[oldHdr->seqno() % WINDOW_SIZE] = pkt->copy();
+
+            //uh oh there is a packet there with the wrong sequnce number, this shouldn't happen...
+            }else if(hdr_Xyzzy::access(rcvWindow[oldHdr->seqno() % WINDOW_SIZE])->seqno() != oldhdr->seqno()){
+                 printf(C_RED "[%d] Receive window has packet with different seqno, 
+                         dropping packet %d, this shouldn't happen, misbehaving packet is %d\n" C_NORMAL,
+                         here_.addr_, oldHdr->seqno(), hdr_Xyzzy::access(rcvWindow[oldHdr->seqno() % WINDOW_SIZE])->seqno());
+            }
+
+            //else we already have it and should just ack it again...
+
+            
+        //packet > HR > NE
+        }else if(rcvHighestReceived > rcvNextExpected && oldHdr->seqno() >  rcvHighestReceived){
+            
+            //This should wraparounds right
+            if(oldhdr->seqno() >=  rcvNextExpected + WINDOW_SIZE){
+                printf(C_RED "[%d] Receive window full (wrap around), dropping packet %d\n" C_NORMAL, here_.addr_, oldHdr->seqno());
+                return;
+            }
+
+        //}else if(){
+        }else{
             printf(C_RED "[%d] Receive window full, dropping packet %d\n" C_NORMAL, here_.addr_, oldHdr->seqno());
             return;
         }
 
-        rcvWindow[oldHdr->seqno() % WINDOW_SIZE] = pkt->copy();
-        */
+        
 
         // Send back an ack, so allocate a packet
         setupPacket(pkt);
@@ -630,9 +680,12 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         fclose(lf);
 
         // Forward data on to application.
-        if (app_) {
+        /*if (app_) {
             app_->process_data(hdr_cmn::access(pkt)->size(), pkt->userdata());
-        }
+        }*/
+
+        //pump a packet from the buffer
+        sndPktToApp();
 
     //if the packet was an ack
     } else if (oldHdr->type() == T_ack) {
@@ -878,12 +931,40 @@ void XyzzyAgent::sendBuddyHeartBeats(){
     //build heart beat packets and loop 
     //over buddies sending them to the first 
     //interface
+    
+    //build heartbeat packet
+
+    //loop over buddies
+    buddyNode* currentBuddy = buddies;
+    while(currentBuddy){
+        currentBuddy = currentBuddy->next;
+    }
+
+
 }
 void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
     //this will loop over the buddies and send the packet I
     //just sent/received to them.  Not sure how the multiple interface
     //thing works so not sure how buddy will know where 
     //it came from /shrug
+    
+    Packet pkt* = p->copy();
+
+    hdr_Xyzzy::access(pkt)->sndRcv() = sndRcv;
+
+    buddyNode* currentBuddy = buddies;
+
+    while(currentBuddy){
+
+        //needs to grab the active interface for a buddy
+        //setup to send the packet and then copy it to the buddy
+
+
+        currentBuddy = currentBuddy->next;
+    }
+
+    pkt->free();
+
 }
 // Add an interface to the interface list
 void XyzzyAgent::AddInterface(int iNsAddr, int iNsPort,
@@ -916,5 +997,36 @@ void XyzzyAgent::AddDestination(int iNsAddr, int iNsPort) {
     destList = newDest;
 }
 
+//sends a packet in the rcv buffer to the listening app
+void XyzzyAgent::sndPktToApp(){
+    if(rcvWindow[rcvNextExpected % WINDOW_SIZE] == NULL)
+        return;
+    else{
+          Packet* p = rcvWindow[rcvNextExpected % WINDOW_SIZE];
+          rcvWindow[rcvNextExpected % WINDOW_SIZE] = NULL;
+            
+          char fname[13];  
+          snprintf(fname, 12, "%d-pssd.log", this->addr());
+          FILE* lf = fopen(fname, "a");
+            
+          if (pkt->userdata()){  
+              PacketData* data = (PacketData*)pkt->userdata();
+              fwrite(data->data(), data->size(), 1, lf);
+          } else
+              fwrite("NULL Data ", 9, 1, lf);
+          fwrite("\n\n\n", 2, 1, lf);
+          fclose(lf);
+
+          //pass it to an app if there is one
+          
+        if (app_) {
+            app_->process_data(hdr_cmn::access(pkt)->size(), pkt->userdata());
+        }
+
+        p->free();
+
+        ++rcvNextExpected;
+    }
+}
 
 /* vi: set tabstop=4 softtabstop=4 shiftwidth=4 expandtab : */

@@ -59,7 +59,7 @@ struct buddyNode{
 
     buddyNode* next;
 
-    buddyNode() : iNsAddr(0), next(NULL) {}
+    buddyNode() : iNsAddr(0), next(NULL), status(B_ACTIVE){}
 };
 // this struct is used to maintain information about destination ips.
 struct DestNode {
@@ -209,6 +209,10 @@ class XyzzyAgent : public Agent {
         //circular buffer for receiver
         Packet* rcvWindow[WINDOW_SIZE];
         int rcvBufLoc_;
+        int rcvNextExpected;
+        int rcvHighestReceived;
+
+        void sndPktToApp();
 
         //the following 2 functions maintain the ackList
         void updateCumAck(int);
