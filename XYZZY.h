@@ -156,12 +156,13 @@ class HeartbeatTimer : public TimerHandler {
 // it will call the function with the given argument when it expires
 class TimeoutTimer : public TimerHandler {
     public:
-        TimeoutTimer(XyzzyAgent* t, void(XyzzyAgent::*fn)(void*), void* arg) : TimerHandler(), t_(t), fn_(fn), arg_(arg) {}
+        TimeoutTimer(XyzzyAgent* t, void(XyzzyAgent::*fn)(void*), void* arg, bool del = false) : TimerHandler(), t_(t), fn_(fn), arg_(arg), del_(del) {}
         virtual void expire(Event*);
     protected:
         XyzzyAgent* t_;
         void(XyzzyAgent::*fn_)(void *);
         void* arg_;
+        bool del_;
 };
 
 //this is our actuall agent class our actuall protocol
@@ -215,7 +216,8 @@ class XyzzyAgent : public Agent {
 
         // this records packet information in the sndWindow, numTries,
         // and timeSent arrays
-        void recordPacket(Packet*, double);
+        bool recordPacket(Packet*, double);
+        void retryRecordPacket(void*);
 
         // set up source and dest for packet
         void setupPacket(Packet* pkt = NULL, DestNode* dn = NULL);
@@ -260,7 +262,6 @@ class XyzzyAgent : public Agent {
         // Send a heartbeat to the active node and set up a timeout timer
         void heartbeat(DestNode*);
         void heartbeatTimeout(void*);
-        //TimeoutTimer* hbTimeout_;
     protected:
         double CHECK_BUFFER_INT;
         double MAXDELAY;

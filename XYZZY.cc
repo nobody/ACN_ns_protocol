@@ -42,6 +42,8 @@ void HeartbeatTimer::expire(Event*){
 // Generic timeout timer -- call the given callback function
 void TimeoutTimer::expire(Event*){
     (t_->*fn_)(arg_);
+    if (del_)
+        delete this;
 }
 
 //this is the constructor, it creates the super and the
@@ -69,7 +71,7 @@ XyzzyAgent::XyzzyAgent() :
     ackList = NULL;
 
     //schedule the retry timer
-    retry_.sched(RETRY_TIME+0.6);
+    retry_.sched(RETRY_TIME+0.5);
 }
 
 //retry packet resends unacked packets every half second or so
@@ -122,12 +124,13 @@ void XyzzyAgent::retryPackets() {
     printf(C_RED "[%d] Ending retry loop at %f\n" C_NORMAL, here_.addr_, timeNow);
 }
 
-void XyzzyAgent::recordPacket(Packet* pkt, double time) {
+bool XyzzyAgent::recordPacket(Packet* pkt, double time) {
     if (sndWindow[sndBufLoc_] != NULL){
         // TODO: delay somehow until there's room for another packet.
         // this is probably better handled in send
         //
         // For now, we'll switch to another destination if one is available
+        /*
         primaryDest->reachable = false;
         nextDest();
 
@@ -138,8 +141,15 @@ void XyzzyAgent::recordPacket(Packet* pkt, double time) {
         hdr_ip::access(pkt)->dport() = dport();
         hdr_ip::access(pkt)->saddr() = addr();
         hdr_ip::access(pkt)->sport() = port();
-        send(pkt, 0);
 
+        //send(pkt, 0);
+        */
+
+        // We can schedule a timeout timer to retry this
+        TimeoutTimer* tt = new TimeoutTimer(this, &XyzzyAgent::retryRecordPacket, (void*)pkt, true);
+        tt->sched(RETRY_TIME);
+        
+        return false;
     } else {
         // TODO: send to buddies
 
@@ -155,7 +165,15 @@ void XyzzyAgent::recordPacket(Packet* pkt, double time) {
         sndBufLoc_++;
         sndBufLoc_ %= WINDOW_SIZE;
         printf(C_GREEN "[%d]  New buffer location: %d for pkt %d\n" C_NORMAL, here_.addr_, sndBufLoc_, hdr_Xyzzy::access(pkt)->seqno());
+
+        return true;
     }
+}
+
+void XyzzyAgent::retryRecordPacket(void* arg){
+    Packet* pkt = (Packet*)arg;
+    if (recordPacket(pkt, Scheduler::instance().clock()) == true)
+        send(pkt, 0);
 }
 
 
