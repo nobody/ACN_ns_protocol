@@ -36,10 +36,11 @@
 #define B_SENT 0
 #define B_RCVD 1
 
+#define B_FAILED_BEATS 5
 
 class HeartbeatTimer;
 class TimeoutTimer;
-
+class BuddyHeartbeatTimer;
 //this struct is used to keep a linked list of the 
 //messages for which we have received acks. we periodically
 //cull all sequential messages from the front of the list
@@ -66,17 +67,20 @@ struct DestNode {
     DestNode(): iNsAddr(0),iNsPort(0),reachable(true),rcount(0),
                 hb_(NULL),hbTimeout_(NULL),next(NULL) {}
 };
-
 struct buddyNode{
     int iNsAddr;
     int status;
     int missedHBS;
+
     DestNode* dests;
+    BuddyHeartbeatTimer * hb_;
+
     buddyNode* next;
 
-    buddyNode() : iNsAddr(0), next(NULL), status(B_ACTIVE){}
+    buddyNode() : iNsAddr(0), next(NULL), status(B_ACTIVE), hb_(NULL){}
     DestNode* getDest();
 };
+
 // this is used to maintain the list of interfaces we have available
 struct IfaceNode {
     int iNsAddr;
@@ -143,6 +147,16 @@ class BuddyTimer : public TimerHandler{
         XyzzyAgent* t_;
 };
 
+class BuddyHeartbeatTimer : public TimerHandler {
+    public:
+        BuddyHeartbeatTimer(XyzzyAgent* t, buddyNode* bn) : TimerHandler(), t_(t), bn_(bn) {}
+        virtual void expire(Event*);
+    protected:
+        XyzzyAgent* t_;
+        buddyNode* bn_;
+};
+
+
 class HeartbeatTimer : public TimerHandler {
     public:
         HeartbeatTimer(XyzzyAgent* t, DestNode* dn) : TimerHandler(), t_(t), dn_(dn) {}
@@ -193,6 +207,7 @@ class XyzzyAgent : public Agent {
         virtual int command(int argc, const char*const* argv);
         void retryPackets();
         void sendBuddyHeartBeats();
+        void buddyMissedBeats(buddyNode*);
         void sndPktToApp();
 
     private:
