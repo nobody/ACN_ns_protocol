@@ -1047,25 +1047,66 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
         //needs to grab the active interface for a buddy
         //setup to send the packet and then copy it to the buddy
         
-        if(currentBuddy->status == B_DEAD)
+        if(currentBuddy->status == B_DEAD){
+            currentbuddy = currentbuddy->next;
             continue;
+        }
 
         DestNode* d = currentBuddy->getDest();
 
-        if(!d)
+        if(!d){
+            currentbuddy = currentbuddy->next;
             continue;
+        }
 
         buddySend(pkt, d);
 
         send(pkt, 0);
         
-        currentBuddy = currentBuddy->next;
+        currentbuddy = currentbuddy->next;
     }
 
     Packet::free(pkt);
 
 }
 
+void XyzzyAgent::sendToBuddies(Packet* p, int type){
+    //this will loop over the buddies and send the packet I
+    //just sent/received to them.  Not sure how the multiple interface
+    //thing works so not sure how buddy will know where 
+    //it came from /shrug
+    
+    Packet *pkt = p->copy();
+
+    buddyNode* currentBuddy = buddies;
+
+    while(currentBuddy){
+
+        //needs to grab the active interface for a buddy
+        //setup to send the packet and then copy it to the buddy
+        
+        if(currentBuddy->status == B_DEAD){
+            currentbuddy = currentbuddy->next;
+            continue;
+        }
+
+        DestNode* d = currentBuddy->getDest();
+
+        if(!d){
+            currentbuddy = currentbuddy->next;
+            continue;
+        }
+
+        buddySend(pkt, d);
+
+        send(pkt->copy(), 0);
+        
+        currentbuddy = currentbuddy->next;
+    }
+
+    Packet::free(pkt);
+
+}
 bool XyzzyAgent::buddySend(Packet* p, DestNode* dest){
 
     return true;

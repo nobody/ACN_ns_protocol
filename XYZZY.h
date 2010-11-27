@@ -33,8 +33,11 @@
 #define B_ACTIVE 1
 #define B_LEADING 2
 
-#define B_SENT 0
-#define B_RCVD 1
+#define B_SENT_ACK 0
+#define B_SENT_MSG 1
+#define B_RCVD_ACK 2
+#define B_RCVD_MSG 3
+
 
 #define B_FAILED_BEATS 5
 
@@ -95,7 +98,9 @@ struct IfaceNode {
 
 //these are the types of headers our protocol uses
 
-enum Xyzzy_header_types { T_init, T_initack, T_normal, T_ack, T_heartbeat, T_buddy, T_beat };
+enum Xyzzy_header_types { T_init, T_initack, T_normal, T_ack, T_heartbeat,
+    //buddy states
+    T_buddy, T_beat T_state, T_rne, T_elect};
 
 enum Xyzzy_states { STATE_NO_CONN, STATE_ASSOCIATING, STATE_ASSOCIATED };
 
@@ -110,6 +115,8 @@ struct hdr_Xyzzy {
     int cumAck_;
     char sndRcv_;
     int heartbeat_;
+    int numTries_;
+    double timeSent_;
     
     /* per-field member functions */
     int& srcid() { return (srcid_); }
@@ -118,6 +125,8 @@ struct hdr_Xyzzy {
     int& cumAck() { return (cumAck_); }
     char& sndRcv() {return (sndRcv_); }
     int& heartbeat() { return (heartbeat_); }
+    int& numTries() {return (numTries_);}
+    double& timeSent(){return (timeSent_);}
 
     /* Packet header access functions */
     static int offset_;
@@ -268,6 +277,7 @@ class XyzzyAgent : public Agent {
 
         //buddy stuff
         void forwardToBuddies(Packet*, char);
+        void sendToBuddies(Packet*, int);
 
         bool buddySend(Packet*, DestNode*);
 
