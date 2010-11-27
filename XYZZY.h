@@ -275,6 +275,7 @@ class XyzzyAgent : public Agent {
         int activeBuddyID_;
         buddyNode* buddies;
         int numOfBuddies_;
+        buddyNode* currSetupBuddy;
 
         
         // head of the interface list

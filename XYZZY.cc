@@ -98,6 +98,11 @@ XyzzyAgent::XyzzyAgent() :
     ackList->seqno = 0;
     ackList->next = NULL;
 
+    buddies = NULL;
+    currSetupBuddy = NULL;
+
+    destList = NULL;
+
     //schedule the retry timer
     retry_.sched(RETRY_TIME+0.5);
 }
@@ -945,6 +950,20 @@ int XyzzyAgent::command(int argc, const char*const* argv) {
 
         return (TCL_ERROR);
         
+    } else if (argc == 3 && strcmp(argv[1], "buddy") == 0) {
+        Agent* opAgent = (Agent*) TclObject::lookup(argv[2]);
+        if (opAgent == NULL){
+            currSetupBuddy = NULL;
+            return (TCL_OK);
+        }
+
+        currSetupBuddy = new buddyNode;
+
+        currSetupBuddy->next = buddies;
+        buddies = currSetupBuddy;
+
+        return (TCL_OK);
+
     } else if (argc == 4 && strcmp(argv[1], "send") == 0) {
         PacketData* d = new PacketData(strlen(argv[3]) + 1);
         strcpy((char*)d->data(), argv[3]);
@@ -1079,13 +1098,20 @@ void XyzzyAgent::AddDestination(int iNsAddr, int iNsPort) {
     newDest->iNsAddr = iNsAddr;
     newDest->iNsPort = iNsPort;
 
-    // set the primary to the last destination added just in case the user does not set a primary
-    primaryDest = newDest;
+    if (currSetupBuddy != NULL){
+        // add destination to buddy instead of dest list
+        newDest->next = currSetupBuddy->dests;
+        currSetupBuddy->dests = newDest;
 
-    DestNode* head = destList;
+    } else {
+        // set the primary to the last destination added just in case the user does not set a primary
+        primaryDest = newDest;
 
-    newDest->next = head;
-    destList = newDest;
+        DestNode* head = destList;
+
+        newDest->next = head;
+        destList = newDest;
+    }
 }
 
 //sends a packet in the rcv buffer to the listening app
