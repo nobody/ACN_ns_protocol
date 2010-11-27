@@ -44,6 +44,13 @@ void TimeoutTimer::expire(Event*){
     (t_->*fn_)(arg_);
 }
 
+void BuddyHeartBeatTimer(Event*){
+    bn_->missedHBS++;
+    if(bn_missedHBS > B_FAILED_BEATS){
+        t_->buddyMissedBeats(bn_);
+    }
+}
+
 //this is the constructor, it creates the super and the
 //retry timer in the initialization statments
 XyzzyAgent::XyzzyAgent() : 
@@ -423,7 +430,7 @@ void XyzzyAgent::ackListPrune(){
 //A PACKET IS PASSED TO RECEIVE IT IS EITHER COPIED FOR BOOK KEEPING STRUCTURES,
 //COPIED FOR RECEIVE, OR YOU ARE HAPPY WITH IT DISSAPPEARING
 void XyzzyAgent::recv(Packet* pkt, Handler*) {
-    
+    printf("[%d] receiving...\n", here_.addr_); 
     //get the header out of the packet we just got
     hdr_Xyzzy* oldHdr = hdr_Xyzzy::access(pkt);
 
@@ -555,6 +562,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         //
         //Packet == NE > HR ... or anything else;
         //we have room in the buffer;
+        printf("[%d] seqno: %d NE: %d HR %d\n", here_.addr_, oldHdr->seqno(), rcvNextExpected, rcvHighestReceived);
         if(oldHdr->seqno() == rcvNextExpected){
             int tmp = oldHdr->seqno() % WINDOW_SIZE
             rcvWindow[tmp] = pkt->copy();
@@ -948,6 +956,8 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
     pkt->free();
 
 }
+
+void 
 // Add an interface to the interface list
 void XyzzyAgent::AddInterface(int iNsAddr, int iNsPort,
                                 NsObject *opTarget, NsObject *opLink) {
@@ -962,6 +972,12 @@ void XyzzyAgent::AddInterface(int iNsAddr, int iNsPort,
     iface->next = head;
     ifaceList = iface;
     numIfaces_++;
+}
+
+//swap interfaces on the buddy and send a heartbeat
+//or mark as dead if we don't have an extra interface.
+void XyzzyAgent::buddyMissedBeats(buddyNode* buddy){
+
 }
 
 // add a new destination to the destination list
