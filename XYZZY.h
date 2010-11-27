@@ -151,6 +151,15 @@ class HeartbeatTimer : public TimerHandler {
         DestNode* dn_;
 };
 
+class AppPassTimer : public TimerHandler {
+    public :
+        AppPassTimer(XyzzyAgent* t): TimerHandler(), t_(t){}
+        virtual void expire(Event*);
+    protected:
+        XyzzyAgent* t_;
+
+};
+
 // Generic Timeout Timer. 
 // Given a function pointer with signature void fn(void*) and a void*,
 // it will call the function with the given argument when it expires
@@ -183,6 +192,8 @@ class XyzzyAgent : public Agent {
         virtual int command(int argc, const char*const* argv);
         void retryPackets();
         void sendBuddyHeartBeats();
+        void sndPktToApp();
+
     private:
         // Agent state
         int state_;
@@ -211,8 +222,6 @@ class XyzzyAgent : public Agent {
         int rcvBufLoc_;
         int rcvNextExpected;
         int rcvHighestReceived;
-
-        void sndPktToApp();
 
         //the following 2 functions maintain the ackList
         void updateCumAck(int);
