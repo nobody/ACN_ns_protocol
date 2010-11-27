@@ -36,6 +36,7 @@
 #define B_SENT 0
 #define B_RCVD 1
 
+#define B_FAILED_BEATS 5
 
 class HeartbeatTimer;
 class TimeoutTimer;
@@ -57,9 +58,11 @@ struct buddyNode{
     int status;
     int missedHBS;
 
+    BuddyHeartbeatTimer * hb_;
+
     buddyNode* next;
 
-    buddyNode() : iNsAddr(0), next(NULL), status(B_ACTIVE){}
+    buddyNode() : iNsAddr(0), next(NULL), status(B_ACTIVE), hb_(null){}
 };
 // this struct is used to maintain information about destination ips.
 struct DestNode {
@@ -142,6 +145,16 @@ class BuddyTimer : public TimerHandler{
         XyzzyAgent* t_;
 };
 
+class BuddyHeartbeatTimer : public TimerHandler {
+    public:
+        HeartbeatTimer(XyzzyAgent* t, buddyNode* bn) : TimerHandler(), t_(t), bn_(bn) {}
+        virtual void expire(Event*);
+    protected:
+        XyzzyAgent* t_;
+        buddyNode* bn_;
+};
+
+
 class HeartbeatTimer : public TimerHandler {
     public:
         HeartbeatTimer(XyzzyAgent* t, DestNode* dn) : TimerHandler(), t_(t), dn_(dn) {}
@@ -192,6 +205,7 @@ class XyzzyAgent : public Agent {
         virtual int command(int argc, const char*const* argv);
         void retryPackets();
         void sendBuddyHeartBeats();
+        void buddyMissedBeats(buddyNode*);
         void sndPktToApp();
 
     private:
