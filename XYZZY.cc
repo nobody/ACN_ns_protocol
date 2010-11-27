@@ -25,6 +25,19 @@ static class XyzzyAgentClass : public TclClass {
         }
 } class_xyzzyagent;
 
+DestNode* buddyNode::getDest(){
+    if(!dests)
+        return NULL;
+    DestNode* retval = dests;
+    while(retval){
+        if(retval->reachable)
+            return retval;
+        else
+            retval = retval->next;
+    }
+    return NULL;
+}
+
 //when the retry timer expires it
 //calls retryPackets()
 void RetryTimer::expire(Event*){
@@ -967,10 +980,23 @@ void XyzzyAgent::sendBuddyHeartBeats(){
     //interface
     
     //build heartbeat packet
-
+    Packet* pkt = allocpkt();
+    
+    
     //loop over buddies
     buddyNode* currentBuddy = buddies;
     while(currentBuddy){
+
+        if(currentBuddy->status == B_DEAD)
+            continue;
+
+        DestNode* d = currentBuddy->getDest();
+
+        if(!d)
+            continue;
+
+        buddySend(pkt, d);
+
         currentBuddy = currentBuddy->next;
     }
 
@@ -985,6 +1011,7 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
     Packet *pkt = p->copy();
 
     hdr_Xyzzy::access(pkt)->sndRcv() = sndRcv;
+    hdr_Xyzzy::access(pkt)->type() = T_buddy;
 
     buddyNode* currentBuddy = buddies;
 
@@ -992,13 +1019,29 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
 
         //needs to grab the active interface for a buddy
         //setup to send the packet and then copy it to the buddy
+        
+        if(currentBuddy->status == B_DEAD)
+            continue;
 
+        DestNode* d = currentBuddy->getDest();
 
+        if(!d)
+            continue;
+
+        buddySend(pkt, d);
+
+        send(pkt, 0);
+        
         currentBuddy = currentBuddy->next;
     }
 
     Packet::free(pkt);
 
+}
+
+bool XyzzyAgent::buddySend(Packet* p, DestNode* dest){
+
+    return true;
 }
 // Add an interface to the interface list
 void XyzzyAgent::AddInterface(int iNsAddr, int iNsPort,

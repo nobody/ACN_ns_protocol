@@ -52,15 +52,6 @@ struct ackListNode{
     ackListNode():seqno(0),next(NULL){}
 };
 
-struct buddyNode{
-    int iNsAddr;
-    int status;
-    int missedHBS;
-
-    buddyNode* next;
-
-    buddyNode() : iNsAddr(0), next(NULL), status(B_ACTIVE){}
-};
 // this struct is used to maintain information about destination ips.
 struct DestNode {
     int iNsAddr;
@@ -76,6 +67,16 @@ struct DestNode {
                 hb_(NULL),hbTimeout_(NULL),next(NULL) {}
 };
 
+struct buddyNode{
+    int iNsAddr;
+    int status;
+    int missedHBS;
+    DestNode* dests;
+    buddyNode* next;
+
+    buddyNode() : iNsAddr(0), next(NULL), status(B_ACTIVE){}
+    DestNode* getDest();
+};
 // this is used to maintain the list of interfaces we have available
 struct IfaceNode {
     int iNsAddr;
@@ -252,6 +253,8 @@ class XyzzyAgent : public Agent {
 
         //buddy stuff
         void forwardToBuddies(Packet*, char);
+
+        bool buddySend(Packet*, DestNode*);
 
         bool isActiveBuddy;
         int activeBuddyID_;
