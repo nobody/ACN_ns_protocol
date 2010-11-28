@@ -186,7 +186,7 @@ bool XyzzyAgent::recordPacket(Packet* pkt, double time) {
         return false;
     } else {
         //send to buddies
-        forwardToBuddies(pkt, B_RCVD);
+        forwardToBuddies(pkt, B_SENT_MSG);
 
         //store the packet we just sent in the
         //sndWindow and set all the relevant varibles
@@ -879,8 +879,8 @@ void XyzzyAgent::updateSndWindow(Packet* pkt)
             hdr_Xyzzy* hdr = hdr_Xyzzy::access(sndWindow[i]);
 
             //and its sequence number is == to the one packet we just got
-            if (hdr->seqno() == oldHdr->seqno()){
-                printf(C_CYAN "[%d] Got an ack for %d and marking the packet in the buffer.\n" C_NORMAL, here_.addr_, oldHdr->seqno());
+            if (hdr->seqno() == hdr_Xyzzy::access(pkt)->seqno()){
+                printf(C_CYAN "[%d] Got an ack for %d and marking the packet in the buffer.\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
                 // found it, delete the packet
                 Packet::free(sndWindow[i]);
                 sndWindow[i] = NULL;
@@ -888,8 +888,8 @@ void XyzzyAgent::updateSndWindow(Packet* pkt)
                 break;
             //if the packet is less than the cumulative ack that came in
             //on the newest packet we can dump it too while were at it.
-            } else if(hdr->seqno() < oldHdr->cumAck()) {
-                printf(C_CYAN "[%d] Got a cumAck for %d and marking the packet %d in the buffer.\n" C_NORMAL, here_.addr_, oldHdr->cumAck(), hdr->seqno());
+            } else if(hdr->seqno() < hdr_Xyzzy::access(pkt)->cumAck()) {
+                printf(C_CYAN "[%d] Got a cumAck for %d and marking the packet %d in the buffer.\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->cumAck(), hdr->seqno());
                 Packet::free(sndWindow[i]);
                 sndWindow[i] = NULL;
             }
@@ -1109,14 +1109,14 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
         //setup to send the packet and then copy it to the buddy
         
         if(currentBuddy->status == B_DEAD){
-            currentbuddy = currentbuddy->next;
+            currentBuddy = currentBuddy->next;
             continue;
         }
 
         DestNode* d = currentBuddy->getDest();
 
         if(!d){
-            currentbuddy = currentbuddy->next;
+            currentBuddy = currentBuddy->next;
             continue;
         }
 
@@ -1124,7 +1124,7 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
 
         send(pkt, 0);
         
-        currentbuddy = currentbuddy->next;
+        currentBuddy = currentBuddy->next;
     }
 
     Packet::free(pkt);
@@ -1147,14 +1147,14 @@ void XyzzyAgent::sendToBuddies(Packet* p, int type){
         //setup to send the packet and then copy it to the buddy
         
         if(currentBuddy->status == B_DEAD){
-            currentbuddy = currentbuddy->next;
+            currentBuddy = currentBuddy->next;
             continue;
         }
 
         DestNode* d = currentBuddy->getDest();
 
         if(!d){
-            currentbuddy = currentbuddy->next;
+            currentBuddy = currentBuddy->next;
             continue;
         }
 
@@ -1162,7 +1162,7 @@ void XyzzyAgent::sendToBuddies(Packet* p, int type){
 
         send(pkt->copy(), 0);
         
-        currentbuddy = currentbuddy->next;
+        currentBuddy = currentBuddy->next;
     }
 
     Packet::free(pkt);
@@ -1210,8 +1210,8 @@ bool XyzzyAgent::buddyRecordPacket(Packet* pkt) {
             if(hdr_Xyzzy::access(sndWindow[i])->seqno() == hdr_Xyzzy::access(pkt)->seqno())
             {        
                 sndWindow[i] = pkt;
-                numTries[i] = hdr_Xyzzy::access(pkt)->numTries;
-                timeSent[i] = hdr_Xyzzy::access(pkt)->timeSent;
+                numTries[i] = hdr_Xyzzy::access(pkt)->numTries();
+                timeSent[i] = hdr_Xyzzy::access(pkt)->timeSent();
                 return true;
             }
         }
@@ -1219,8 +1219,8 @@ bool XyzzyAgent::buddyRecordPacket(Packet* pkt) {
         //store the packet we just sent in the
         //sndWindow and set all the relevant varibles
         sndWindow[sndBufLoc_] = pkt;
-        numTries[sndBufLoc_] = hdr_Xyzzy::access(pkt)->numTries;
-        timeSent[sndBufLoc_] = hdr_Xyzzy::access(pkt)->timeSent;
+        numTries[sndBufLoc_] = hdr_Xyzzy::access(pkt)->numTries();
+        timeSent[sndBufLoc_] = hdr_Xyzzy::access(pkt)->timeSent();
 
         //move the buffer location forward one.
         //and move it back around if it has moved

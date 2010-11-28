@@ -100,7 +100,7 @@ struct IfaceNode {
 
 enum Xyzzy_header_types { T_init, T_initack, T_normal, T_ack, T_heartbeat,
     //buddy states
-    T_buddy, T_beat T_state, T_rne, T_elect};
+    T_buddy, T_beat, T_state, T_rne, T_elect};
 
 enum Xyzzy_states { STATE_NO_CONN, STATE_ASSOCIATING, STATE_ASSOCIATED };
 
@@ -235,7 +235,7 @@ class XyzzyAgent : public Agent {
         //timeSent is a time stamp so we know when to try to resend
         //a packet
         Packet *sndWindow[WINDOW_SIZE];
-        double numTries[WINDOW_SIZE];
+        int numTries[WINDOW_SIZE];
         double timeSent[WINDOW_SIZE];
 
         //this keeps track of the head of the sndWindow buffer since
