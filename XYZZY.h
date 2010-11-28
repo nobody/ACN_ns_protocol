@@ -71,7 +71,8 @@ struct DestNode {
                 hb_(NULL),hbTimeout_(NULL),next(NULL) {}
 };
 struct buddyNode{
-    int iNsAddr;
+    //int iNsAddr;
+    int id;
     int status;
     int missedHBS;
 
@@ -80,7 +81,7 @@ struct buddyNode{
 
     buddyNode* next;
 
-    buddyNode() : iNsAddr(0), next(NULL), status(B_ACTIVE), hb_(NULL){}
+    buddyNode() : /*iNsAddr(0)*/id(0), status(B_ACTIVE), missedHBS(0), dests(NULL), hb_(NULL), next(NULL){}
     DestNode* getDest();
 };
 
@@ -220,6 +221,9 @@ class XyzzyAgent : public Agent {
         void sndPktToApp();
 
     private:
+        // Unique Id for agent
+        int id_;
+
         // Agent state
         int state_;
         int init_;
@@ -271,9 +275,6 @@ class XyzzyAgent : public Agent {
 
         // Find a destination in the list by address
         DestNode* findDest(int);
-
-        //the current cumulative ack value
-        int cumAck_;
 
         //the head of linked list of received packets
         ackListNode* ackList;
