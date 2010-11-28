@@ -219,6 +219,7 @@ class XyzzyAgent : public Agent {
         void sendBuddyHeartBeats();
         void buddyMissedBeats(buddyNode*);
         void sndPktToApp();
+        void Elect(int electNum);
 
     private:
         // Unique Id for agent

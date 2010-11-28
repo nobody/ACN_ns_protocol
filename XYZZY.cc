@@ -322,6 +322,7 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
     // Only send if we are associated
     if (state_ == STATE_ASSOCIATED)
     {
+        setupPacket();
         send(p, 0);
     }
 
@@ -487,7 +488,11 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
     printf("[%d] receiving...\n", here_.addr_); 
     //get the header out of the packet we just got
     hdr_Xyzzy* oldHdr = hdr_Xyzzy::access(pkt);
-     printf("[%d] seqno: %d \n", here_.addr_, oldHdr->seqno());
+    printf("[%d] seqno: %d is type: %d (state: %d) \n", here_.addr_, oldHdr->seqno(), oldHdr->type(), state_);
+
+    if (oldHdr->type() == T_state){
+        state_ = hdr_Xyzzy::access(pkt)->seqno();
+    }
 
     // if we are not assiciated, only allow association packets to be processed
     if (state_ != STATE_ASSOCIATED) {
@@ -758,11 +763,13 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                 printf(C_PURPLE "[%d] Got a heartbeat from someone I don't know... (hb:%d, dest:%d)\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->heartbeat(), hdr_ip::access(pkt)->saddr());
             }
         }
-    }
-    else if(hdr_Xyzzy::access(pkt)->type() == T_buddy) {
-        switch(hdr_Xyzzy::access(pkt)->sndRcv())
+    } else if(oldHdr->type() == T_buddy) {
+        
+        printf("[%d] seqno: %d is a buddy packet\n", here_.addr_, oldHdr->seqno());
+        switch(oldHdr->sndRcv())
         {
             case B_SENT_MSG:
+                 printf("[%d] seqno: %d is a sent message\n", here_.addr_, oldHdr->seqno());
                 buddyRecordPacket(pkt->copy());
                 break;
             case B_SENT_ACK:
@@ -776,12 +783,11 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                 updateSndWindow(pkt);
                 break;
             default:
+                printf(C_RED "[%d] Unknown buddy packet %c\n", here_.addr_, hdr_Xyzzy::access(pkt)->sndRcv());
                 break;
         }
     }
-    else if(hdr_Xyzzy::access(pkt)->type() == T_state) {
-        state_ = hdr_Xyzzy::access(pkt)->seqno();
-    }
+    // T_state is checked at the top...
     else if(hdr_Xyzzy::access(pkt)->type() == T_rne) {
         int i;
         for(i = rcvNextExpected; i < hdr_Xyzzy::access(pkt)->seqno(); i++)
@@ -1021,6 +1027,12 @@ int XyzzyAgent::command(int argc, const char*const* argv) {
             return (TCL_OK);
         }
 
+        // if we have no buddies yet, add this one
+        if (buddies == NULL){
+            buddies = new buddyNode;
+            buddies->id = opAgent->id_;
+        }
+
         for (buddyNode* current = buddies; current != NULL; current = current->next){
             if (current->id == opAgent->id_){
                 // this is the one...
@@ -1129,6 +1141,7 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
         //setup to send the packet and then copy it to the buddy
         
         if(currentBuddy->status == B_DEAD){
+            printf(C_BLUE "[%d] Skipping buddy %d since it is dead\n" C_NORMAL, here_.addr_, currentBuddy->id);
             currentBuddy = currentBuddy->next;
             continue;
         }
@@ -1136,10 +1149,12 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
         DestNode* d = currentBuddy->getDest();
 
         if(!d){
+            printf(C_BLUE "[%d] Skipping buddy %d since it has no valid dests\n" C_NORMAL, here_.addr_, currentBuddy->id);
             currentBuddy = currentBuddy->next;
             continue;
         }
 
+        printf(C_BLUE "[%d] Forwarding packet %d to buddy %d\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(p)->seqno(), currentBuddy->id);
         buddySend(pkt, d);
 
         send(pkt->copy(), 0);
@@ -1159,6 +1174,8 @@ void XyzzyAgent::sendToBuddies(Packet* p, int type){
     
     Packet *pkt = p->copy();
 
+    hdr_Xyzzy::access(pkt)->type() = type;
+
     buddyNode* currentBuddy = buddies;
 
     while(currentBuddy){
@@ -1167,6 +1184,7 @@ void XyzzyAgent::sendToBuddies(Packet* p, int type){
         //setup to send the packet and then copy it to the buddy
         
         if(currentBuddy->status == B_DEAD){
+            printf(C_BLUE "[%d] Skipping buddy %d since it is dead\n" C_NORMAL, here_.addr_, currentBuddy->id);
             currentBuddy = currentBuddy->next;
             continue;
         }
@@ -1174,10 +1192,12 @@ void XyzzyAgent::sendToBuddies(Packet* p, int type){
         DestNode* d = currentBuddy->getDest();
 
         if(!d){
+            printf(C_BLUE "[%d] Skipping buddy %d since it has no valid dests\n" C_NORMAL, here_.addr_, currentBuddy->id);
             currentBuddy = currentBuddy->next;
             continue;
         }
 
+        printf(C_BLUE "[%d] Sending packet %d to buddy %d\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(p)->seqno(), currentBuddy->id);
         buddySend(pkt, d);
 
         send(pkt->copy(), 0);
@@ -1189,10 +1209,13 @@ void XyzzyAgent::sendToBuddies(Packet* p, int type){
 
 }
 bool XyzzyAgent::buddySend(Packet* p, DestNode* dest){
-    if (p == NULL || dest == NULL)
+    if (p == NULL || dest == NULL){
+        printf(C_BLUE "[%d] Buddy packet not sent. p or dest was NULL\n", here_.addr_);
         return false;
+    }
     
     setupPacket(NULL, dest);
+    printf(C_BLUE "[%d] Sending packet %d to buddy at %d\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(p)->seqno(), dest->iNsAddr);
     hdr_ip::access(p)->daddr() = daddr();
     hdr_ip::access(p)->dport() = dport();
     hdr_ip::access(p)->saddr() = addr();
@@ -1225,7 +1248,7 @@ void XyzzyAgent::buddyMissedBeats(buddyNode* buddy){
 bool XyzzyAgent::buddyRecordPacket(Packet* pkt) {
     if (sndWindow[sndBufLoc_] != NULL){
         // We can schedule a timeout timer to retry this
-        printf(C_BLUE "[%d] No room for pkt: %d, schedulting rerecord\n", here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
+        printf(C_BLUE "[%d] No room for pkt: %d, not schedulting rerecord\n", here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
         
         return false;
     } else {
@@ -1240,6 +1263,7 @@ bool XyzzyAgent::buddyRecordPacket(Packet* pkt) {
                 sndWindow[i] = pkt;
                 numTries[i] = hdr_Xyzzy::access(pkt)->numTries();
                 timeSent[i] = hdr_Xyzzy::access(pkt)->timeSent();
+                printf(C_GREEN "[%d] packet %d already in buffer\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
                 return true;
             }
         }
