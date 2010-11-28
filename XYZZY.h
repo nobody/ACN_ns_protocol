@@ -248,6 +248,9 @@ class XyzzyAgent : public Agent {
         int rcvNextExpected;
         int rcvHighestReceived;
 
+        void updateRcvWindow(Packet*);
+        void updateSndWindow(Packet*);
+
         //the following 2 functions maintain the ackList
         void updateCumAck(int);
         void ackListPrune();
@@ -280,6 +283,7 @@ class XyzzyAgent : public Agent {
         void sendToBuddies(Packet*, int);
 
         bool buddySend(Packet*, DestNode*);
+        bool buddyRecordPacket(Packet*);
 
         bool isActiveBuddy;
         int activeBuddyID_;
