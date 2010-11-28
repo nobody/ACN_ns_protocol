@@ -64,10 +64,7 @@ void TimeoutTimer::expire(Event*){
 }
 
 void BuddyHeartbeatTimer::expire(Event*){
-    bn_->missedHBS++;
-    if(bn_->missedHBS > B_FAILED_BEATS){
-        t_->buddyMissedBeats(bn_);
-    }
+    t_->buddyMissedBeats(bn_);
 }
 
 //this is the constructor, it creates the super and the
@@ -80,6 +77,7 @@ XyzzyAgent::XyzzyAgent() :
         sndBufLoc_(0),
         rcvBufLoc_(0),
         retry_(this),
+        buddyTimer_(this),
         rcvNextExpected(0),
         rcvHighestReceived(0)
 {
@@ -106,6 +104,7 @@ XyzzyAgent::XyzzyAgent() :
 
     //schedule the retry timer
     retry_.sched(RETRY_TIME+0.5);
+    buddyTimer_.sched(0.5);
 }
 
 //retry packet resends unacked packets every half second or so
@@ -790,6 +789,32 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         }
         rcvNextExpected = hdr_Xyzzy::access(pkt)->seqno();
     }
+    else if(hdr_Xyzzy::access(pkt)->type() == T_beat) {
+        if(hdr_Xyzzy::access(pkt)->seqno() > 0)
+        {
+            setupPacket(pkt);
+            Packet *hbReply = allocpkt();
+            hdr_Xyzzy::access(hbReply)->seqno() = hdr_Xyzzy::access(pkt)->seqno() * -1;
+            hdr_Xyzzy::access(hbReply)->type() = T_beat;
+            send(hbReply, 0);
+        }
+        else
+        {
+            buddyNode *currentBuddy;
+            for(currentBuddy = buddies; currentBuddy != NULL; currentBuddy = currentBuddy->next)
+            {
+                if(currentBuddy->getDest()->iNsAddr == hdr_ip::access(pkt)->saddr())
+                {
+                    currentBuddy->missedHBS = 0;
+                    if(currentBuddy->hb_->state == PENDING)
+                    {
+                        currentBuddy->hb_->cancel();
+                    }
+                    break;
+                }
+            }
+        }
+    }
 
     //free the packet we just received
     //BEWARE THAT THIS FUCTION DOES THIS
@@ -1082,7 +1107,7 @@ void XyzzyAgent::sendBuddyHeartBeats(){
     
     //build heartbeat packet
     Packet* pkt = allocpkt();
-    
+    hdr_Xyzzy::access(pkt)->seqno() = seqno_;
     
     //loop over buddies
     buddyNode* currentBuddy = buddies;
@@ -1101,6 +1126,12 @@ void XyzzyAgent::sendBuddyHeartBeats(){
             currentBuddy = currentBuddy->next;
             continue;
         }
+
+        if(currentBuddy->hb_ == NULL)
+        {
+            currentBuddy->hb_ = new BuddyHeartbeatTimer(this, currentBuddy);
+        }
+        currentBuddy->hb_->sched(0.2);
 
         buddySend(pkt, d);
 
@@ -1208,8 +1239,15 @@ void XyzzyAgent::AddInterface(int iNsAddr, int iNsPort,
 
 //swap interfaces on the buddy and send a heartbeat
 //or mark as dead if we don't have an extra interface.
-void XyzzyAgent::buddyMissedBeats(buddyNode* buddy){
-
+void XyzzyAgent::buddyMissedBeats(buddyNode* buddy) {
+    buddy->missedHBS++;
+    if(buddy->missedHBS > B_FAILED_BEATS){
+        buddy->getDest()->reachable = false;
+        if(buddy->getDest() == NULL)
+        {
+            buddy->status = B_DEAD;
+        }
+    }
 }
 
 bool XyzzyAgent::buddyRecordPacket(Packet* pkt) {

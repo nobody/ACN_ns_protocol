@@ -313,6 +313,7 @@ class XyzzyAgent : public Agent {
         double CHECK_BUFFER_INT;
         double MAXDELAY;
         RetryTimer retry_;
+        BuddyTimer buddyTimer_;
         //HeartbeatTimer hb_;
 };
 
