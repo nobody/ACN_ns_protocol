@@ -1089,12 +1089,18 @@ void XyzzyAgent::sendBuddyHeartBeats(){
     while(currentBuddy){
 
         if(currentBuddy->status == B_DEAD)
+        {
+            currentBuddy = currentBuddy->next;
             continue;
+        }
 
         DestNode* d = currentBuddy->getDest();
 
-        if(!d)
+        if(d == NULL)
+        {
+            currentBuddy = currentBuddy->next;
             continue;
+        }
 
         buddySend(pkt, d);
 
@@ -1102,9 +1108,8 @@ void XyzzyAgent::sendBuddyHeartBeats(){
 
         currentBuddy = currentBuddy->next;
     }
-
-
 }
+
 void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
     //this will loop over the buddies and send the packet I
     //just sent/received to them.  Not sure how the multiple interface
@@ -1254,6 +1259,14 @@ bool XyzzyAgent::buddyRecordPacket(Packet* pkt) {
 
         return true;
     }
+}
+
+void XyzzyAgent::Elect(int electNum)
+{
+    Packet *ep = allocpkt();
+    hdr_Xyzzy::access(ep)->seqno() = electNum;
+    sendToBuddies(ep, T_elect);
+    Packet::free(ep);
 }
 
 // add a new destination to the destination list
