@@ -357,6 +357,7 @@ void XyzzyAgent::setupPacket(Packet* pkt, DestNode* dn){
         Packet* routingPacket = allocpkt();
 
         Connector* conn = (Connector*) coreTarget->find(routingPacket);
+        Packet::free(routingPacket);
 
         IfaceNode* current = ifaceList;
 
@@ -1235,6 +1236,7 @@ bool XyzzyAgent::buddyRecordPacket(Packet* pkt) {
 
 // add a new destination to the destination list
 void XyzzyAgent::AddDestination(int iNsAddr, int iNsPort) {
+    // set source info
     DestNode* newDest = new DestNode;
     newDest->iNsAddr = iNsAddr;
     newDest->iNsPort = iNsPort;
@@ -1243,6 +1245,7 @@ void XyzzyAgent::AddDestination(int iNsAddr, int iNsPort) {
         // add destination to buddy instead of dest list
         newDest->next = currSetupBuddy->dests;
         currSetupBuddy->dests = newDest;
+        printf(C_YELLOW "[%d] Adding dest %d to buddy \n" C_NORMAL, here_.addr_, iNsAddr);
 
     } else {
         // set the primary to the last destination added just in case the user does not set a primary
@@ -1252,6 +1255,7 @@ void XyzzyAgent::AddDestination(int iNsAddr, int iNsPort) {
 
         newDest->next = head;
         destList = newDest;
+        printf(C_YELLOW "[%d] Adding dest %d to node\n" C_NORMAL, here_.addr_, iNsAddr);
     }
 }
 
