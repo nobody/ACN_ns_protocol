@@ -132,7 +132,7 @@ void XyzzyAgent::retryPackets() {
             //target_->recv(sndWindow[i]->copy());
             setupPacket();
             Packet* newpkt = sndWindow[i]->copy();
-                hdr_ip::access(newpkt)->daddr() = daddr();
+            hdr_ip::access(newpkt)->daddr() = daddr();
             hdr_ip::access(newpkt)->dport() = dport();
             hdr_ip::access(newpkt)->saddr() = addr();
             hdr_ip::access(newpkt)->sport() = port();
@@ -1108,6 +1108,7 @@ void XyzzyAgent::sendBuddyHeartBeats(){
     //build heartbeat packet
     Packet* pkt = allocpkt();
     hdr_Xyzzy::access(pkt)->seqno() = seqno_;
+    hdr_Xyzzy::access(pkt)->type() = T_beat;    
     
     //loop over buddies
     buddyNode* currentBuddy = buddies;
@@ -1134,6 +1135,8 @@ void XyzzyAgent::sendBuddyHeartBeats(){
         currentBuddy->hb_->sched(0.2);
 
         buddySend(pkt, d);
+
+        send(pkt->copy(), 0);
 
         currentBuddy = currentBuddy->next;
     }
@@ -1171,7 +1174,7 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
 
         buddySend(pkt, d);
 
-        send(pkt, 0);
+        send(pkt->copy(), 0);
         
         currentBuddy = currentBuddy->next;
     }
@@ -1218,6 +1221,14 @@ void XyzzyAgent::sendToBuddies(Packet* p, int type){
 
 }
 bool XyzzyAgent::buddySend(Packet* p, DestNode* dest){
+    if (p == NULL || dest == NULL)
+        return false;
+    
+    setupPacket(NULL, dest);
+    hdr_ip::access(p)->daddr() = daddr();
+    hdr_ip::access(p)->dport() = dport();
+    hdr_ip::access(p)->saddr() = addr();
+    hdr_ip::access(p)->sport() = port();
 
     return true;
 }
