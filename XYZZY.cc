@@ -812,7 +812,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                 if(currentBuddy->getDest()->iNsAddr == hdr_ip::access(pkt)->saddr())
                 {
                     currentBuddy->missedHBS = 0;
-                    if(currentBuddy->hb_->state == PENDING)
+                    if(currentBuddy->hb_->status() == TIMER_PENDING)
                     {
                         currentBuddy->hb_->cancel();
                     }
