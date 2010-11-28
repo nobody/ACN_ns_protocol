@@ -85,6 +85,7 @@ XyzzyAgent::XyzzyAgent() :
 {
     //bind the varible to a Tcl varible
     bind("packetSize_", &size_);
+    bind("id_", &id_);
 
     // initialize buffer
     for (int i = 0; i < WINDOW_SIZE; ++i)
@@ -234,11 +235,11 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
             addrs[idx] = current->iNsAddr;
             idx++;
         }
-        for(buddyNode* current = buddies; current != NULL; current = current->next){
+/*        for(buddyNode* current = buddies; current != NULL; current = current->next){
             addrs[idx] = current->iNsAddr;
             idx++;
         }
-
+*/
         //set the type and size of the packet payload
         //in the common header
         hdr_cmn::access(pkt)->ptype() = PT_XYZZY;
@@ -509,10 +510,12 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                     addrs[idx] = current->iNsAddr;
                     idx++;
                 }
+/*
                 for(buddyNode* current = buddies; current != NULL; current = current->next){
                     addrs[idx] = current->iNsAddr;
                     idx++;
                 }
+*/
                 p->setdata(iflist);
 
                 //create a new protocol specific header for the packet
@@ -1012,17 +1015,26 @@ int XyzzyAgent::command(int argc, const char*const* argv) {
 
         return (TCL_ERROR);
         
-    } else if (argc == 3 && strcmp(argv[1], "buddy") == 0) {
-        Agent* opAgent = (Agent*) TclObject::lookup(argv[2]);
+    } else if (argc == 5 && strcmp(argv[1], "add-buddy-destination") == 0) {
+        XyzzyAgent* opAgent= (XyzzyAgent*) TclObject::lookup(argv[2]);
         if (opAgent == NULL){
-            currSetupBuddy = NULL;
             return (TCL_OK);
         }
 
-        currSetupBuddy = new buddyNode;
+        for (buddyNode* current = buddies; current != NULL; current = current->next){
+            if (current->id == opAgent->id_){
+                // this is the one...
+                DestNode* newdest = new DestNode;
+                newdest->iNsAddr = atoi(argv[3]);
+                newdest->iNsPort = atoi(argv[4]);
 
-        currSetupBuddy->next = buddies;
-        buddies = currSetupBuddy;
+                newdest->next = current->dests;
+                current->dests = newdest;
+            } else if (current->next == NULL){
+                current->next = new buddyNode;
+                current->next->id = opAgent->id_;
+            }
+        }
 
         return (TCL_OK);
 
