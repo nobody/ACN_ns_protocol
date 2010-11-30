@@ -13,6 +13,7 @@
 #include "../common/scheduler.h"
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdio.h>
 
 #define C_NORMAL    "\033[0m"
 #define C_BALCK     "\033[0;30m"
@@ -209,6 +210,7 @@ class XyzzyAgent : public Agent {
         friend class BuddyTimer;
         XyzzyAgent();
         XyzzyAgent(packet_t);
+        ~XyzzyAgent();
         virtual void sendmsg(int nbytes, AppData* data, const char *flags = 0);
         virtual void sendmsg(int nbytes, const char *flags = 0){
             sendmsg(nbytes, NULL, flags);
@@ -292,7 +294,7 @@ class XyzzyAgent : public Agent {
         buddyNode* buddies;
         int numOfBuddies_;
         buddyNode* currSetupBuddy;
-
+        FILE *buddyLog;
         
         // head of the interface list
         IfaceNode* ifaceList;
