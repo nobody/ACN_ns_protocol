@@ -138,10 +138,10 @@ void XyzzyAgent::retryPackets() {
     //each packet in our sndWindow was sent, if more thatn the RETRY_TIME
     //has elapsed we want to send it again
     double timeNow = Scheduler::instance().clock();
-    printf(C_RED "[%d] Starting retry loop at %f\n" C_NORMAL, here_.addr_, timeNow);
+    printf(C_RED "[%d] Starting retry loop at %f\n" C_NORMAL, id_, timeNow);
     for (int i = 0; i < WINDOW_SIZE; ++i) {
         if (sndWindow[i] != NULL && timeNow - timeSent[i] > RETRY_TIME) {
-            printf(C_RED "[%d] ** RETRYING PACKET %d **\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(sndWindow[i])->seqno());
+            printf(C_RED "[%d] ** RETRYING PACKET %d **\n" C_NORMAL, id_, hdr_Xyzzy::access(sndWindow[i])->seqno());
 
             // send again.
             // this needs to be copied here because recv frees packets when
@@ -173,7 +173,7 @@ void XyzzyAgent::retryPackets() {
         retry_.cancel();
     }
     retry_.resched(RETRY_TIME);
-    printf(C_RED "[%d] Ending retry loop at %f\n" C_NORMAL, here_.addr_, timeNow);
+    printf(C_RED "[%d] Ending retry loop at %f\n" C_NORMAL, id_, timeNow);
 }
 
 bool XyzzyAgent::recordPacket(Packet* pkt, double time) {
@@ -186,7 +186,7 @@ bool XyzzyAgent::recordPacket(Packet* pkt, double time) {
         primaryDest->reachable = false;
         nextDest();
 
-        printf(C_BLUE "[%d] Trying to resend via another route!  packet lost. (seqno: %d) in the way of (seqno: %d)\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(sndWindow[sndBufLoc_])->seqno(), hdr_Xyzzy::access(pkt)->seqno());
+        printf(C_BLUE "[%d] Trying to resend via another route!  packet lost. (seqno: %d) in the way of (seqno: %d)\n" C_NORMAL, id_, hdr_Xyzzy::access(sndWindow[sndBufLoc_])->seqno(), hdr_Xyzzy::access(pkt)->seqno());
 
         setupPacket();
         hdr_ip::access(pkt)->daddr() = daddr();
@@ -198,7 +198,7 @@ bool XyzzyAgent::recordPacket(Packet* pkt, double time) {
         */
 
         // We can schedule a timeout timer to retry this
-        printf(C_BLUE "[%d] No room for pkt: %d, schedulting rerecord\n", here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
+        printf(C_BLUE "[%d] No room for pkt: %d, schedulting rerecord\n", id_, hdr_Xyzzy::access(pkt)->seqno());
         TimeoutTimer* tt = new TimeoutTimer(this, &XyzzyAgent::retryRecordPacket, (void*)pkt, true);
         tt->sched(RETRY_TIME);
         
@@ -218,7 +218,7 @@ bool XyzzyAgent::recordPacket(Packet* pkt, double time) {
         //past the bounds of the array
         sndBufLoc_++;
         sndBufLoc_ %= WINDOW_SIZE;
-        printf(C_GREEN "[%d]  New buffer location: %d for pkt %d\n" C_NORMAL, here_.addr_, sndBufLoc_, hdr_Xyzzy::access(pkt)->seqno());
+        printf(C_GREEN "[%d]  New buffer location: %d for pkt %d\n" C_NORMAL, id_, sndBufLoc_, hdr_Xyzzy::access(pkt)->seqno());
 
         return true;
     }
@@ -226,7 +226,7 @@ bool XyzzyAgent::recordPacket(Packet* pkt, double time) {
 
 void XyzzyAgent::retryRecordPacket(void* arg){
     Packet* pkt = (Packet*)arg;
-    printf(C_BLUE "[%d] Retrying record packet: %d\n", here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
+    printf(C_BLUE "[%d] Retrying record packet: %d\n", id_, hdr_Xyzzy::access(pkt)->seqno());
     if (recordPacket(pkt, Scheduler::instance().clock()) == true)
         send(pkt, 0);
 }
@@ -304,11 +304,11 @@ void XyzzyAgent::sendmsg(int nbytes, AppData* data, const char* flags) {
 
     //if the maximum packet size is zero...somthing has gone terribly wrong
     if (size_ == 0)
-        printf(C_RED "[%d] Xyzzy size_ is 0!\n" C_NORMAL, here_.addr_);
+        printf(C_RED "[%d] Xyzzy size_ is 0!\n" C_NORMAL, id_);
 
     //this will eventually handle fragmentation
     if (data && nbytes > size_) {
-        printf("[%d] Xyzzy data does not fit in a single packet. Abort\n", here_.addr_);
+        printf("[%d] Xyzzy data does not fit in a single packet. Abort\n", id_);
          return;
     }
 
@@ -503,13 +503,18 @@ void XyzzyAgent::ackListPrune(){
 //A PACKET IS PASSED TO RECEIVE IT IS EITHER COPIED FOR BOOK KEEPING STRUCTURES,
 //COPIED FOR RECEIVE, OR YOU ARE HAPPY WITH IT DISSAPPEARING
 void XyzzyAgent::recv(Packet* pkt, Handler*) {
-    printf("[%d] receiving...\n", here_.addr_); 
+    printf("[%d] receiving...\n", id_); 
     //get the header out of the packet we just got
     hdr_Xyzzy* oldHdr = hdr_Xyzzy::access(pkt);
-    printf("[%d] seqno: %d is type: %d (state: %d) \n", here_.addr_, oldHdr->seqno(), oldHdr->type(), state_);
+    printf("[%d] seqno: %d is type: %d (state: %d) \n", id_, oldHdr->seqno(), oldHdr->type(), state_);
 
     if (oldHdr->type() == T_state){
         state_ = hdr_Xyzzy::access(pkt)->seqno();
+        if(state_ == STATE_ASSOCIATED){
+                rcvHighestReceived = 0; 
+                rcvNextExpected = rcvHighestReceived + 1;
+        }
+
     }
 
     // if we are not assiciated, only allow association packets to be processed
@@ -555,7 +560,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                 // generate random number and save it for comparison
                 initHdr->cumAck() = init_ = rand();
 
-                printf(C_WHITE "[%d] Got an init (%d), generating initack (%d)\n" C_NORMAL, here_.addr_, initHdr->seqno(), initHdr->cumAck());
+                printf(C_WHITE "[%d] Got an init (%d), generating initack (%d)\n" C_NORMAL, id_, initHdr->seqno(), initHdr->cumAck());
 
                 // set up ip header
                 hdr_ip* newip = hdr_ip::access(p);
@@ -603,7 +608,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                     initHdr->seqno() = -1;
                     initHdr->cumAck() = oldHdr->cumAck();
 
-                    printf(C_WHITE "[%d] Got an initack (%d,%d), generating initack (%d,%d)\n" C_NORMAL, here_.addr_, oldHdr->seqno(), oldHdr->cumAck(), initHdr->seqno(), initHdr->cumAck());
+                    printf(C_WHITE "[%d] Got an initack (%d,%d), generating initack (%d,%d)\n" C_NORMAL, id_, oldHdr->seqno(), oldHdr->cumAck(), initHdr->seqno(), initHdr->cumAck());
 
                     // set up ip header
                     hdr_ip* newip = hdr_ip::access(p);
@@ -623,7 +628,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                     hdr_Xyzzy::access(sp)->seqno() = state_;
                     sendToBuddies(sp, T_state);
 
-                    printf(C_WHITE "[%d] Associated.\n" C_NORMAL, here_.addr_);
+                    printf(C_WHITE "[%d] Associated.\n" C_NORMAL, id_);
 
                     // TODO: pull addresses outr of packet
 
@@ -635,7 +640,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                     hdr_Xyzzy::access(sp)->seqno() = state_;
                     sendToBuddies(sp, T_state);
 
-                    printf(C_WHITE "[%d] Associated.\n" C_NORMAL, here_.addr_);
+                    printf(C_WHITE "[%d] Associated.\n" C_NORMAL, id_);
                 } else {
                     // TODO: Maybe send a kill connection message?
                 }
@@ -649,7 +654,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
     //switch on the packet type
     //if it is a normal header
     if (oldHdr->type() == T_normal) {
-         printf("[%d] seqno: %d NE: %d HR %d\n", here_.addr_, oldHdr->seqno(), rcvNextExpected, rcvHighestReceived);
+         printf("[%d] seqno: %d NE: %d HR %d\n", id_, oldHdr->seqno(), rcvNextExpected, rcvHighestReceived);
 
         updateRcvWindow(pkt);
         forwardToBuddies(pkt, B_RCVD_MSG);
@@ -680,9 +685,9 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         newHdr->cumAck() = ackList->seqno;
 
         if (pkt->userdata())
-            printf(C_CYAN "[%d] Generating ack for seqno %d (cumAck: %d).  Received payload of size %d\n" C_NORMAL, here_.addr_, newHdr->seqno(), newHdr->cumAck(), pkt->userdata()->size());
+            printf(C_CYAN "[%d] Generating ack for seqno %d (cumAck: %d).  Received payload of size %d\n" C_NORMAL, id_, newHdr->seqno(), newHdr->cumAck(), pkt->userdata()->size());
         else
-            printf(C_CYAN "[%d] Generating ack for seqno %d (cumAck: %d)\n" C_NORMAL, here_.addr_, newHdr->seqno(), newHdr->cumAck());
+            printf(C_CYAN "[%d] Generating ack for seqno %d (cumAck: %d)\n" C_NORMAL, id_, newHdr->seqno(), newHdr->cumAck());
 
         // set up ip header
         hdr_ip* newip = hdr_ip::access(ap);
@@ -749,7 +754,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
             newHdr->seqno() = hdr_Xyzzy::access(pkt)->seqno();
             newHdr->heartbeat() = hdr_Xyzzy::access(pkt)->heartbeat()*-1;
 
-            printf(C_PURPLE "[%d] I'm not dead yet! (hb:%d, dest:%d)\n" C_NORMAL, here_.addr_, newHdr->heartbeat(), hdr_ip::access(ap)->daddr());
+            printf(C_PURPLE "[%d] I'm not dead yet! (hb:%d, dest:%d)\n" C_NORMAL, id_, newHdr->heartbeat(), hdr_ip::access(ap)->daddr());
 
             // set up ip header
             hdr_ip* newip = hdr_ip::access(ap);
@@ -768,7 +773,7 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
         } else {
             DestNode* dest = findDest(hdr_ip::access(pkt)->saddr());
             if (dest){
-                printf(C_PURPLE "[%d] 'Ere, he says he's not dead. (hb:%d, dest:%d)\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->heartbeat(), dest->iNsAddr);
+                printf(C_PURPLE "[%d] 'Ere, he says he's not dead. (hb:%d, dest:%d)\n" C_NORMAL, id_, hdr_Xyzzy::access(pkt)->heartbeat(), dest->iNsAddr);
                 if (dest->hbTimeout_ != NULL){
                     if (dest->hbTimeout_->status() == TIMER_PENDING)
                         dest->hbTimeout_->cancel();
@@ -778,17 +783,17 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                 dest->reachable = true;
                 dest->rcount = 0;
             } else {
-                printf(C_PURPLE "[%d] Got a heartbeat from someone I don't know... (hb:%d, dest:%d)\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->heartbeat(), hdr_ip::access(pkt)->saddr());
+                printf(C_PURPLE "[%d] Got a heartbeat from someone I don't know... (hb:%d, dest:%d)\n" C_NORMAL, id_, hdr_Xyzzy::access(pkt)->heartbeat(), hdr_ip::access(pkt)->saddr());
             }
         }
     } else if(oldHdr->type() == T_buddy) {
         
         fprintf(buddyLog, "received type T_buddy, saddr = %d, seqno = %d\n", hdr_ip::access(pkt)->saddr(), hdr_Xyzzy::access(pkt)->seqno());
-        printf("[%d] seqno: %d is a buddy packet\n", here_.addr_, oldHdr->seqno());
+        printf("[%d] seqno: %d is a buddy packet\n", id_, oldHdr->seqno());
         switch(oldHdr->sndRcv())
         {
             case B_SENT_MSG:
-                 printf("[%d] seqno: %d is a sent message\n", here_.addr_, oldHdr->seqno());
+                 printf("[%d] seqno: %d is a sent message\n", id_, oldHdr->seqno());
                 buddyRecordPacket(pkt->copy());
                 break;
             case B_SENT_ACK:
@@ -802,18 +807,19 @@ void XyzzyAgent::recv(Packet* pkt, Handler*) {
                 updateSndWindow(pkt);
                 break;
             default:
-                printf(C_RED "[%d] Unknown buddy packet %c\n", here_.addr_, hdr_Xyzzy::access(pkt)->sndRcv());
+                printf(C_RED "[%d] Unknown buddy packet %c\n", id_, hdr_Xyzzy::access(pkt)->sndRcv());
                 break;
         }
     }
     // T_state is checked at the top...
     else if(hdr_Xyzzy::access(pkt)->type() == T_rne) {
         fprintf(buddyLog, "received type T_rne, saddr = %d, seqno = %d\n", hdr_ip::access(pkt)->saddr(), hdr_Xyzzy::access(pkt)->seqno());
-        int i;
+        /*int i;
         for(i = rcvNextExpected; i < hdr_Xyzzy::access(pkt)->seqno(); i++)
         {
             rcvWindow[i % WINDOW_SIZE] = NULL;
-        }
+        }*/
+        buddySndPktToApp( hdr_Xyzzy::access(pkt)->seqno());
         rcvNextExpected = hdr_Xyzzy::access(pkt)->seqno();
     }
     else if(hdr_Xyzzy::access(pkt)->type() == T_beat) {
@@ -855,7 +861,7 @@ void XyzzyAgent::updateRcvWindow(Packet *pkt)
     //
     //Packet == NE > HR ... or anything else;
     //we have room in the buffer;
-    printf("[%d] seqno: %d NE: %d HR %d\n", here_.addr_, hdr_Xyzzy::access(pkt)->seqno(), rcvNextExpected, rcvHighestReceived);
+    printf("[%d] seqno: %d NE: %d HR %d\n", id_, hdr_Xyzzy::access(pkt)->seqno(), rcvNextExpected, rcvHighestReceived);
     if(hdr_Xyzzy::access(pkt)->seqno() == rcvNextExpected) {
         int tmp = hdr_Xyzzy::access(pkt)->seqno() % WINDOW_SIZE;
         rcvWindow[tmp] = pkt->copy();
@@ -881,7 +887,7 @@ void XyzzyAgent::updateRcvWindow(Packet *pkt)
         } else if(hdr_Xyzzy::access(rcvWindow[hdr_Xyzzy::access(pkt)->seqno() % WINDOW_SIZE])->seqno() != hdr_Xyzzy::access(pkt)->seqno()) {
              printf(C_RED "[%d] Receive window has packet with different seqno," 
                      "dropping packet %d, this shouldn't happen, misbehaving packet is %d\n" C_NORMAL,
-                     here_.addr_, hdr_Xyzzy::access(pkt)->seqno(), hdr_Xyzzy::access(rcvWindow[hdr_Xyzzy::access(pkt)->seqno() % WINDOW_SIZE])->seqno());
+                     id_, hdr_Xyzzy::access(pkt)->seqno(), hdr_Xyzzy::access(rcvWindow[hdr_Xyzzy::access(pkt)->seqno() % WINDOW_SIZE])->seqno());
         }
 
         //else we already have it and should just ack it again...
@@ -892,7 +898,7 @@ void XyzzyAgent::updateRcvWindow(Packet *pkt)
         
         //This should wraparounds right
         if(hdr_Xyzzy::access(pkt)->seqno() >=  rcvNextExpected + WINDOW_SIZE){
-            printf(C_RED "[%d] Receive window full (wrap around), dropping packet %d\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
+            printf(C_RED "[%d] Receive window full (wrap around), dropping packet %d\n" C_NORMAL, id_, hdr_Xyzzy::access(pkt)->seqno());
             return;
         }
 
@@ -908,7 +914,7 @@ void XyzzyAgent::updateRcvWindow(Packet *pkt)
         //catch wrap arounds 
         if(hdr_Xyzzy::access(pkt)->seqno() >=  rcvNextExpected + WINDOW_SIZE){
             
-            printf(C_RED "[%d] Receive window full (wrap around), dropping packet %d\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
+            printf(C_RED "[%d] Receive window full (wrap around), dropping packet %d\n" C_NORMAL, id_, hdr_Xyzzy::access(pkt)->seqno());
             return;
         }
 
@@ -918,10 +924,10 @@ void XyzzyAgent::updateRcvWindow(Packet *pkt)
             rcvHighestReceived = hdr_Xyzzy::access(pkt)->seqno();
         }else{
 
-            printf(C_RED "[%d] THE DEMON IS HERE, dropping packet %d\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
+            printf(C_RED "[%d] THE DEMON IS HERE, dropping packet %d\n" C_NORMAL, id_, hdr_Xyzzy::access(pkt)->seqno());
         }
     } else {
-        printf(C_RED "[%d] Receive window full, dropping packet %d\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
+        printf(C_RED "[%d] Receive window full, dropping packet %d\n" C_NORMAL, id_, hdr_Xyzzy::access(pkt)->seqno());
         return;
     }
 }
@@ -937,7 +943,7 @@ void XyzzyAgent::updateSndWindow(Packet* pkt)
 
             //and its sequence number is == to the one packet we just got
             if (hdr->seqno() == hdr_Xyzzy::access(pkt)->seqno()){
-                printf(C_CYAN "[%d] Got an ack for %d and marking the packet in the buffer.\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
+                printf(C_CYAN "[%d] Got an ack for %d and marking the packet in the buffer.\n" C_NORMAL, id_, hdr_Xyzzy::access(pkt)->seqno());
                 // found it, delete the packet
                 Packet::free(sndWindow[i]);
                 sndWindow[i] = NULL;
@@ -946,7 +952,7 @@ void XyzzyAgent::updateSndWindow(Packet* pkt)
             //if the packet is less than the cumulative ack that came in
             //on the newest packet we can dump it too while were at it.
             } else if(hdr->seqno() < hdr_Xyzzy::access(pkt)->cumAck()) {
-                printf(C_CYAN "[%d] Got a cumAck for %d and marking the packet %d in the buffer.\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->cumAck(), hdr->seqno());
+                printf(C_CYAN "[%d] Got a cumAck for %d and marking the packet %d in the buffer.\n" C_NORMAL, id_, hdr_Xyzzy::access(pkt)->cumAck(), hdr->seqno());
                 Packet::free(sndWindow[i]);
                 sndWindow[i] = NULL;
             }
@@ -964,7 +970,7 @@ void XyzzyAgent::nextDest(){
         }
     }
     if(current == NULL)
-        printf(C_YELLOW "[%d] No more destination IPs!\n" C_NORMAL, here_.addr_);
+        printf(C_YELLOW "[%d] No more destination IPs!\n" C_NORMAL, id_);
 }
 
 DestNode* XyzzyAgent::findDest(int addr) {
@@ -1002,7 +1008,7 @@ void XyzzyAgent::heartbeat(DestNode* dest){
         dest->hbTimeout_->sched(0.2);
     }
 
-    printf(C_PURPLE "[%d] Bring out yer dead! (hb:%d, dest:%d)\n" C_NORMAL, here_.addr_, seqno_, dest->iNsAddr);
+    printf(C_PURPLE "[%d] Bring out yer dead! (hb:%d, dest:%d)\n" C_NORMAL, id_, seqno_, dest->iNsAddr);
     send(p, 0);
 }
 
@@ -1011,11 +1017,11 @@ void XyzzyAgent::heartbeatTimeout(void* arg) {
 
     if (dn){
         dn->rcount++;
-        printf(C_PURPLE "[%d] No you're not, you'll be stone dead in a moment. (hb:%d, rcount:%d, dest: %d)\n" C_NORMAL, here_.addr_, seqno_, dn->rcount, dn->iNsAddr);
+        printf(C_PURPLE "[%d] No you're not, you'll be stone dead in a moment. (hb:%d, rcount:%d, dest: %d)\n" C_NORMAL, id_, seqno_, dn->rcount, dn->iNsAddr);
         if (dn->rcount > MAX_HB_MISS){
             dn->reachable = false;
             nextDest();
-            printf(C_YELLOW "[%d] New destination: %d\n" C_NORMAL, here_.addr_, primaryDest->iNsAddr);
+            printf(C_YELLOW "[%d] New destination: %d\n" C_NORMAL, id_, primaryDest->iNsAddr);
 
             // schedule another heartbeat 
             if (dn->hb_){
@@ -1055,7 +1061,7 @@ int XyzzyAgent::command(int argc, const char*const* argv) {
         
         // see if the dest is in the list and make it the primary
         if (destList == NULL){
-            printf(C_YELLOW "[%d] Trying to set primary dest when there are no destinations\n" C_NORMAL, here_.addr_);
+            printf(C_YELLOW "[%d] Trying to set primary dest when there are no destinations\n" C_NORMAL, id_);
             return (TCL_ERROR);
         }
 
@@ -1202,8 +1208,8 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
         //setup to send the packet and then copy it to the buddy
         
         if(currentBuddy->status == B_DEAD){
-            printf(C_BLUE "[%d] Skipping buddy %d since it is dead\n" C_NORMAL, here_.addr_, currentBuddy->id);
-            fprintf(buddyLog, "[%d] Skipping buddy %d since it is dead\n", here_.addr_, currentBuddy->id);
+            printf(C_BLUE "[%d] Skipping buddy %d since it is dead\n" C_NORMAL, id_, currentBuddy->id);
+            fprintf(buddyLog, "[%d] Skipping buddy %d since it is dead\n", id_, currentBuddy->id);
             currentBuddy = currentBuddy->next;
             continue;
         }
@@ -1211,14 +1217,14 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
         DestNode* d = currentBuddy->getDest();
 
         if(!d){
-            printf(C_BLUE "[%d] Skipping buddy %d since it has no valid dests\n" C_NORMAL, here_.addr_, currentBuddy->id);
-            fprintf(buddyLog, "[%d] Skipping buddy %d since it has no valid dests\n", here_.addr_, currentBuddy->id);
+            printf(C_BLUE "[%d] Skipping buddy %d since it has no valid dests\n" C_NORMAL, id_, currentBuddy->id);
+            fprintf(buddyLog, "[%d] Skipping buddy %d since it has no valid dests\n", id_, currentBuddy->id);
             currentBuddy = currentBuddy->next;
             continue;
         }
 
-        printf(C_BLUE "[%d] Forwarding packet %d to buddy %d\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(p)->seqno(), currentBuddy->id);
-        fprintf(buddyLog, "[%d] Forwarding packet %d to buddy %d\n", here_.addr_, hdr_Xyzzy::access(p)->seqno(), currentBuddy->id);
+        printf(C_BLUE "[%d] Forwarding packet %d to buddy %d\n" C_NORMAL, id_, hdr_Xyzzy::access(p)->seqno(), currentBuddy->id);
+        fprintf(buddyLog, "[%d] Forwarding packet %d to buddy %d\n", id_, hdr_Xyzzy::access(p)->seqno(), currentBuddy->id);
         buddySend(pkt, d);
 
         send(pkt->copy(), 0);
@@ -1253,8 +1259,8 @@ void XyzzyAgent::sendToBuddies(Packet* p, int type){
         //setup to send the packet and then copy it to the buddy
         
         if(currentBuddy->status == B_DEAD){
-            printf(C_BLUE "[%d] Skipping buddy %d since it is dead\n" C_NORMAL, here_.addr_, currentBuddy->id);
-            fprintf(buddyLog, "[%d] Skipping buddy %d since it is dead\n", here_.addr_, currentBuddy->id);
+            printf(C_BLUE "[%d] Skipping buddy %d since it is dead\n" C_NORMAL, id_, currentBuddy->id);
+            fprintf(buddyLog, "[%d] Skipping buddy %d since it is dead\n", id_, currentBuddy->id);
             currentBuddy = currentBuddy->next;
             continue;
         }
@@ -1262,14 +1268,14 @@ void XyzzyAgent::sendToBuddies(Packet* p, int type){
         DestNode* d = currentBuddy->getDest();
 
         if(!d){
-            printf(C_BLUE "[%d] Skipping buddy %d since it has no valid dests\n" C_NORMAL, here_.addr_, currentBuddy->id);
-            fprintf(buddyLog, "[%d] Skipping buddy %d since it has no valid dests\n", here_.addr_, currentBuddy->id);
+            printf(C_BLUE "[%d] Skipping buddy %d since it has no valid dests\n" C_NORMAL, id_, currentBuddy->id);
+            fprintf(buddyLog, "[%d] Skipping buddy %d since it has no valid dests\n", id_, currentBuddy->id);
             currentBuddy = currentBuddy->next;
             continue;
         }
 
-        printf(C_BLUE "[%d] Sending packet %d to buddy %d\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(p)->seqno(), currentBuddy->id);
-        fprintf(buddyLog, "[%d] Sending packet %d to buddy %d\n", here_.addr_, hdr_Xyzzy::access(p)->seqno(), currentBuddy->id);
+        printf(C_BLUE "[%d] Sending packet %d to buddy %d\n" C_NORMAL, id_, hdr_Xyzzy::access(p)->seqno(), currentBuddy->id);
+        fprintf(buddyLog, "[%d] Sending packet %d to buddy %d\n", id_, hdr_Xyzzy::access(p)->seqno(), currentBuddy->id);
         buddySend(pkt, d);
 
         send(pkt->copy(), 0);
@@ -1285,14 +1291,14 @@ bool XyzzyAgent::buddySend(Packet* p, DestNode* dest)
     fprintf(buddyLog, "buddySend()\n");
     if(p == NULL || dest == NULL)
     {
-        printf(C_BLUE "[%d] Buddy packet not sent. p or dest was NULL\n", here_.addr_);
-        fprintf(buddyLog, "[%d] Buddy packet not sent. p or dest was NULL\n", here_.addr_);
+        printf(C_BLUE "[%d] Buddy packet not sent. p or dest was NULL\n", id_);
+        fprintf(buddyLog, "[%d] Buddy packet not sent. p or dest was NULL\n", id_);
         return false;
     }
     
     setupPacket(NULL, dest);
-    printf(C_BLUE "[%d] Sending packet %d to buddy at %d\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(p)->seqno(), dest->iNsAddr);
-    fprintf(buddyLog, "[%d] Sending packet %d to buddy at %d\n", here_.addr_, hdr_Xyzzy::access(p)->seqno(), dest->iNsAddr);
+    printf(C_BLUE "[%d] Sending packet %d to buddy at %d\n" C_NORMAL, id_, hdr_Xyzzy::access(p)->seqno(), dest->iNsAddr);
+    fprintf(buddyLog, "[%d] Sending packet %d to buddy at %d\n", id_, hdr_Xyzzy::access(p)->seqno(), dest->iNsAddr);
     hdr_ip::access(p)->daddr() = daddr();
     hdr_ip::access(p)->dport() = dport();
     hdr_ip::access(p)->saddr() = addr();
@@ -1337,8 +1343,8 @@ bool XyzzyAgent::buddyRecordPacket(Packet* pkt)
     if (sndWindow[sndBufLoc_] != NULL)
     {
         // We can schedule a timeout timer to retry this
-        printf(C_BLUE "[%d] No room for pkt: %d, not schedulting rerecord\n", here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
-        fprintf(buddyLog, "[%d] No room for pkt: %d, not schedulting rerecord\n", here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
+        printf(C_BLUE "[%d] No room for pkt: %d, not schedulting rerecord\n", id_, hdr_Xyzzy::access(pkt)->seqno());
+        fprintf(buddyLog, "[%d] No room for pkt: %d, not schedulting rerecord\n", id_, hdr_Xyzzy::access(pkt)->seqno());
         
         return false;
     } else {
@@ -1353,8 +1359,8 @@ bool XyzzyAgent::buddyRecordPacket(Packet* pkt)
                 sndWindow[i] = pkt;
                 numTries[i] = hdr_Xyzzy::access(pkt)->numTries();
                 timeSent[i] = hdr_Xyzzy::access(pkt)->timeSent();
-                printf(C_GREEN "[%d] packet %d already in buffer\n" C_NORMAL, here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
-                fprintf(buddyLog, "[%d] packet %d already in buffer\n", here_.addr_, hdr_Xyzzy::access(pkt)->seqno());
+                printf(C_GREEN "[%d] packet %d already in buffer\n" C_NORMAL, id_, hdr_Xyzzy::access(pkt)->seqno());
+                fprintf(buddyLog, "[%d] packet %d already in buffer\n", id_, hdr_Xyzzy::access(pkt)->seqno());
                 return true;
             }
         }
@@ -1370,8 +1376,8 @@ bool XyzzyAgent::buddyRecordPacket(Packet* pkt)
         //past the bounds of the array
         sndBufLoc_++;
         sndBufLoc_ %= WINDOW_SIZE;
-        printf(C_GREEN "[%d]  New buffer location: %d for pkt %d\n" C_NORMAL, here_.addr_, sndBufLoc_, hdr_Xyzzy::access(pkt)->seqno());
-        fprintf(buddyLog, "[%d]  New buffer location: %d for pkt %d\n", here_.addr_, sndBufLoc_, hdr_Xyzzy::access(pkt)->seqno());
+        printf(C_GREEN "[%d]  New buffer location: %d for pkt %d\n" C_NORMAL, id_, sndBufLoc_, hdr_Xyzzy::access(pkt)->seqno());
+        fprintf(buddyLog, "[%d]  New buffer location: %d for pkt %d\n", id_, sndBufLoc_, hdr_Xyzzy::access(pkt)->seqno());
 
         return true;
     }
@@ -1397,7 +1403,7 @@ void XyzzyAgent::AddDestination(int iNsAddr, int iNsPort) {
         // add destination to buddy instead of dest list
         newDest->next = currSetupBuddy->dests;
         currSetupBuddy->dests = newDest;
-        printf(C_YELLOW "[%d] Adding dest %d to buddy \n" C_NORMAL, here_.addr_, iNsAddr);
+        printf(C_YELLOW "[%d] Adding dest %d to buddy \n" C_NORMAL, id_, iNsAddr);
 
     } else {
         // set the primary to the last destination added just in case the user does not set a primary
@@ -1407,16 +1413,17 @@ void XyzzyAgent::AddDestination(int iNsAddr, int iNsPort) {
 
         newDest->next = head;
         destList = newDest;
-        printf(C_YELLOW "[%d] Adding dest %d to node\n" C_NORMAL, here_.addr_, iNsAddr);
+        printf(C_YELLOW "[%d] Adding dest %d to node\n" C_NORMAL, id_, iNsAddr);
     }
 }
 
 //sends a packet in the rcv buffer to the listening app
 void XyzzyAgent::sndPktToApp(){
 
-    printf(C_GREEN "[%d]Forwarding packet to app...\n" C_NORMAL, here_.addr_);
+    
+    printf(C_GREEN "[%d]Forwarding packet to app...\n" C_NORMAL, id_);
     if(rcvWindow[rcvNextExpected % WINDOW_SIZE] == NULL){
-        printf(C_RED "[%d]Still waiting on packet %d\n" C_NORMAL, here_.addr_, rcvNextExpected);
+        printf(C_RED "[%d]Still waiting on packet %d\n" C_NORMAL, id_, rcvNextExpected);
         return;
     }
     else{
@@ -1424,9 +1431,9 @@ void XyzzyAgent::sndPktToApp(){
               Packet* pkt = rcvWindow[rcvNextExpected % WINDOW_SIZE];
               rcvWindow[rcvNextExpected % WINDOW_SIZE] = NULL;
                 
-            printf(C_GREEN "[%d] Packet %d forwarded\n" C_NORMAL, here_.addr_, rcvNextExpected);
+            printf(C_GREEN "[%d] Packet %d forwarded\n" C_NORMAL, id_, rcvNextExpected);
               char fname[13];  
-              snprintf(fname, 12, "%d-pssd.log", this->addr());
+              snprintf(fname, 12, "%d-pssd.log", id_);
               FILE* lf = fopen(fname, "a");
                 
               if (pkt->userdata()){  
@@ -1454,4 +1461,39 @@ void XyzzyAgent::sndPktToApp(){
     }
 }
 
+void XyzzyAgent::buddySndPktToApp(int next){
+
+    
+    for(int i = rcvNextExpected; rcvNextExpected <  next; ++rcvNextExpected){
+        if(rcvWindow[rcvNextExpected % WINDOW_SIZE] == NULL){
+            //state is no longer consistentant... don't know what to do...
+        printf(C_RED "[%d] CHOOSE THE FORM OF THE DESTRUCTOR!!! Packet %d never made it to buddy...we are inconsistant\n" C_NORMAL, id_, rcvNextExpected);
+            continue;
+        }
+          Packet* pkt = rcvWindow[rcvNextExpected % WINDOW_SIZE];
+          rcvWindow[rcvNextExpected % WINDOW_SIZE] = NULL;
+            
+        printf(C_GREEN "[%d] Packet %d forwarded\n" C_NORMAL, id_, rcvNextExpected);
+          char fname[13];  
+          snprintf(fname, 12, "%d-pssd.log", id_);
+          FILE* lf = fopen(fname, "a");
+            
+          if (pkt->userdata()){  
+              PacketData* data = (PacketData*)pkt->userdata();
+              fwrite(data->data(), data->size(), 1, lf);
+          } else
+              fwrite("NULL Data ", 9, 1, lf);
+          fwrite("\n\n\n", 2, 1, lf);
+          fclose(lf);
+
+          //pass it to an app if there is one
+          
+        if (app_) {
+            app_->process_data(hdr_cmn::access(pkt)->size(), pkt->userdata());
+        }
+
+        Packet::free(pkt);
+
+    }
+}
 /* vi: set tabstop=4 softtabstop=4 shiftwidth=4 expandtab : */

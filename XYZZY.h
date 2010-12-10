@@ -221,6 +221,7 @@ class XyzzyAgent : public Agent {
         void sendBuddyHeartBeats();
         void buddyMissedBeats(buddyNode*);
         void sndPktToApp();
+        void buddySndPktToApp(int);
         void Elect(int electNum);
 
     private:
