@@ -119,10 +119,12 @@ $ns duplex-link $host1_bif1 $host3_bif1 5Mb 20ms DropTail
 set xyzzy0 [new Agent/Xyzzy]
 $ns multihome-attach-agent $host0_core $xyzzy0
 $xyzzy0 set id_ 0
+$xyzzy0 set isActiveBuddy 1
 
 set xyzzy1 [new Agent/Xyzzy]
 $ns multihome-attach-agent $host1_core $xyzzy1
 $xyzzy1 set id_ 1
+$xyzzy1 set isActiveBuddy 1
 
 set xyzzy2 [new Agent/Xyzzy]
 $ns multihome-attach-agent $host2_core $xyzzy2

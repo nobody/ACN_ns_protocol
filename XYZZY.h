@@ -290,7 +290,7 @@ class XyzzyAgent : public Agent {
         bool buddySend(Packet*, DestNode*);
         bool buddyRecordPacket(Packet*);
 
-        bool isActiveBuddy;
+        int isActiveBuddy;
         int activeBuddyID_;
         buddyNode* buddies;
         int numOfBuddies_;

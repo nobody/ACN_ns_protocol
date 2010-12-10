@@ -85,10 +85,13 @@ XyzzyAgent::XyzzyAgent() :
     //bind the varible to a Tcl varible
     bind("packetSize_", &size_);
     bind("id_", &id_);
+    bind("isActiveBuddy", &isActiveBuddy);
     
     // Set up ID
     id_ = id_counter;
     id_counter++;
+
+    isActiveBuddy = 0;
 
     // initialize buffer
     for (int i = 0; i < WINDOW_SIZE; ++i)
@@ -128,6 +131,8 @@ void XyzzyAgent::retryPackets() {
     if (state_ != STATE_ASSOCIATED)
         return;
 
+    if(!isActiveBuddy)
+        return;
 
     //we want to get the time and compare it against the time that
     //each packet in our sndWindow was sent, if more thatn the RETRY_TIME
@@ -1179,6 +1184,9 @@ void XyzzyAgent::forwardToBuddies(Packet* p, char sndRcv){
     //thing works so not sure how buddy will know where 
     //it came from /shrug
 
+    if(!isActiveBuddy)
+        return;
+
     fprintf(buddyLog, "forwardToBuddies()\n");
 
     Packet *pkt = p->copy();
@@ -1227,6 +1235,9 @@ void XyzzyAgent::sendToBuddies(Packet* p, int type){
     //just sent/received to them.  Not sure how the multiple interface
     //thing works so not sure how buddy will know where 
     //it came from /shrug
+
+    if(!isActiveBuddy && type != T_beat)
+        return;
 
     fprintf(buddyLog, "sendToBuddies()\n");
     
