@@ -33,6 +33,7 @@
 #define B_DEAD 0
 #define B_ACTIVE 1
 #define B_LEADING 2
+#define B_ACTIVE_NO_CONN 3
 
 #define B_SENT_ACK 0
 #define B_SENT_MSG 1
@@ -125,6 +126,7 @@ struct hdr_Xyzzy {
     int& seqno() { return (seqno_); }
     int& type() { return (type_); }
     int& cumAck() { return (cumAck_); }
+    int& status() { return (cumAck_);} 
     char& sndRcv() {return (sndRcv_); }
     int& heartbeat() { return (heartbeat_); }
     int& numTries() {return (numTries_);}
@@ -291,13 +293,18 @@ class XyzzyAgent : public Agent {
         bool buddySend(Packet*, DestNode*);
         bool buddyRecordPacket(Packet*);
 
+        void evaluateStatus();
+
         int isActiveBuddy;
+        int myBuddyStatus;
         int activeBuddyID_;
         buddyNode* buddies;
         int numOfBuddies_;
         buddyNode* currSetupBuddy;
         FILE *buddyLog;
-        
+       
+
+
         // head of the interface list
         IfaceNode* ifaceList;
         int numIfaces_;
