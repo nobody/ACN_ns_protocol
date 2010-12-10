@@ -20,6 +20,7 @@ proc finish {} {
 	exit 0
 }
 
+# send host
 set host0_core [$ns node]
 set host0_if0 [$ns node]
 set host0_if1 [$ns node]
@@ -40,6 +41,7 @@ $ns multihome-add-interface $host0_core $host0_if1
 $ns multihome-add-interface $host0_core $host0_bif0
 $ns multihome-add-interface $host0_core $host0_bif1
 
+# dest host
 set host1_core [$ns node]
 set host1_if0 [$ns node]
 set host1_if1 [$ns node]
@@ -60,6 +62,7 @@ $ns multihome-add-interface $host1_core $host1_if1
 $ns multihome-add-interface $host1_core $host1_bif0
 $ns multihome-add-interface $host1_core $host1_bif1
 
+# send buddy
 set host2_core [$ns node]
 set host2_if0 [$ns node]
 set host2_if1 [$ns node]
@@ -80,6 +83,7 @@ $ns multihome-add-interface $host2_core $host2_if1
 $ns multihome-add-interface $host2_core $host2_bif0
 $ns multihome-add-interface $host2_core $host2_bif1
 
+# dest buddy
 set host3_core [$ns node]
 set host3_if0 [$ns node]
 set host3_if1 [$ns node]

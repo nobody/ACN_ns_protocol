@@ -226,6 +226,7 @@ class XyzzyAgent : public Agent {
     private:
         // Unique Id for agent
         int id_;
+        static int id_counter;
 
         // Agent state
         int state_;

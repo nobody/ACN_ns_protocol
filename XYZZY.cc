@@ -2,6 +2,7 @@
 
 
 int hdr_Xyzzy::offset_;
+int XyzzyAgent::id_counter;
 
 
 //these two static classes represent the agent and the header
@@ -84,6 +85,10 @@ XyzzyAgent::XyzzyAgent() :
     //bind the varible to a Tcl varible
     bind("packetSize_", &size_);
     bind("id_", &id_);
+    
+    // Set up ID
+    id_ = id_counter;
+    id_counter++;
 
     // initialize buffer
     for (int i = 0; i < WINDOW_SIZE; ++i)
@@ -1363,7 +1368,7 @@ bool XyzzyAgent::buddyRecordPacket(Packet* pkt)
 
 void XyzzyAgent::Elect(int electNum)
 {
-    fprintf("Elect(%d)\n", electNum);
+    fprintf(buddyLog, "Elect(%d)\n", electNum);
     Packet *ep = allocpkt();
     hdr_Xyzzy::access(ep)->seqno() = electNum;
     sendToBuddies(ep, T_elect);
