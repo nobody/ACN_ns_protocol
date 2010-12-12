@@ -11,6 +11,7 @@
 #include "../common/packet.h"
 #include "../common/ip.h"
 #include "../common/scheduler.h"
+#include "XYZZY/XyzzyApp.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -41,7 +42,7 @@
 #define B_RCVD_MSG 3
 
 
-#define B_FAILED_BEATS 5
+#define B_FAILED_BEATS 2
 
 class HeartbeatTimer;
 class TimeoutTimer;
@@ -293,7 +294,8 @@ class XyzzyAgent : public Agent {
         bool buddySend(Packet*, DestNode*);
         bool buddyRecordPacket(Packet*);
 
-        void evaluateStatus();
+        void evaluateStatus(int msg = 0);
+        bool isReceiving;
 
         int isActiveBuddy;
         int myBuddyStatus;
