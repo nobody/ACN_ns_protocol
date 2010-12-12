@@ -4,9 +4,11 @@
 // Add "Application/testFile set interval_ 0.05" to tcl/lib/ns-default.tcl
 #include "timer-handler.h"
 #include "packet.h"
-#include "app.h"
+//#include "app.h"
+#include "XYZZY/XyzzyApp.h"
 
 class testFile;
+class XyzzyAgent;
 
 class SendFileTimer : public TimerHandler {
 	public:
@@ -15,15 +17,16 @@ class SendFileTimer : public TimerHandler {
 	protected:
 	testFile* t_;
 };
-class testFile: public Application {
+class testFile: public XyzzyApp {
 	public:
-	testFile();
+	testFile(Agent* xyzzy);
 	void send_data();  // called by SendTimer:expire (Sender)
+	virtual void setOffset(int num);	// to set the offset in the file
 	protected:
 	int command(int argc, const char*const* argv);
 	void start();       // Start sending data packets (Sender)
 	void stop();        // Stop sending data packets (Sender)
-	virtual void processData(int size, AppData* data); //this is what is called when the application is recieving data
+	virtual void process_data(int size, AppData* data); //this is what is called when the application is recieving data
 	double interval_;      // Application data packet transmission interval
 	int numReads;	// variable used to store the number of reads done from the file to find current location
 
