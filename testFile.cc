@@ -1,6 +1,8 @@
 #include "testFile.h"
 #include <iostream>
 #include <fstream>
+#include <stdlib.h>
+#include <string.h>
 
 static class testFileClass : public TclClass {
 public:
@@ -29,8 +31,9 @@ testFile::testFile(Agent* xyzzy): XyzzyApp(xyzzy), interval_(0.05), snd_timer_(t
     agent_ = xyzzy;
     agent_->attachApp(this);
 
-	//not sure how the bind works but, interval_ should at least be 
-	//bound here.
+    fileInputName = "alice.txt";
+    fileOutputName = "alice-out.txt";
+
     bind("interval_", &interval_);
 }
 
@@ -48,6 +51,18 @@ int testFile::command(int argc, const char*const* argv)
 		    agent_->attachApp(this);
 		    return(TCL_OK);
 		}
+
+        if (strcmp(argv[1], "set-input-file-name") == 0) {
+            fileInputName = (char*) malloc(sizeof(char) * (strlen(argv[2]) + 1));
+            strcpy(fileInputName, argv[2]);
+            return (TCL_OK);
+        }
+
+        if (strcmp(argv[1], "set-output-file-name") == 0) {
+            fileOutputName = (char*) malloc(sizeof(char) * (strlen(argv[2]) + 1));
+            strcpy(fileOutputName, argv[2]);
+            return (TCL_OK);
+        }
 	}
 
 	//if not bonding an agent let the super deal with it
@@ -70,7 +85,8 @@ void testFile::process_data(int size, AppData* data){
 
     //open the file
     ofstream myFile;
-    myFile.open( "alice out.txt", ios::out |  ios::app );
+    //myFile.open( "alice out.txt", ios::out | ios::app );
+    myFile.open( fileOutputName, ios::out |  ios::app );
 
     //write the packet data to the file
     myFile.write((char*) pData->data(), size);
@@ -88,7 +104,8 @@ void testFile::send_data(){
 
     //create a file and read in the alice in wonderland text file
     ifstream myFile;
-    myFile.open( "alice.txt", ios::in );    
+    myFile.open( fileInputName, ios::in );
+    // myFile.open( "alice.txt", ios::in );    
 
 	if(running_){
         counter_++;

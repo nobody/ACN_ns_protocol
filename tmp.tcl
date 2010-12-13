@@ -86,13 +86,6 @@ $ns duplex-link $host0_if1 $host1_if1 5Mb 20ms DropTail
 
 set xyzzy0 [new Agent/Xyzzy]
 $ns multihome-attach-agent $host0_core $xyzzy0
-#$xyzzy0 set fid_ 0
-#$xyzzy0 set debugMask_ -1
-#$xyzzy0 set debugFileIndex_ 0
-#$xyzzy0 set mtu_ 1500
-#$xyzzy0 set dataChunkSize_ 1468
-#$xyzzy0 set numOutStreams_ 1
-#$xyzzy0 set oneHeartbeatTimer_ 1   # one heartbeat timer shared for all dests
 
 set trace_ch [open trace.xyzzy w]
 $xyzzy0 set trace_all_ 1           # trace them all on oneline
@@ -103,19 +96,17 @@ $xyzzy0 attach $trace_ch
 
 set xyzzy1 [new Agent/Xyzzy]
 $ns multihome-attach-agent $host1_core $xyzzy1
-#$xyzzy1 set debugMask_ -1
-#$xyzzy1 set debugFileIndex_ 1
-#$xyzzy1 set mtu_ 1500
-#$xyzzy1 set initialRwnd_ 131072
-#$xyzzy1 set useDelayedSacks_ 1
 
 $ns color 0 Red
 $ns color 1 Blue
 
 $ns connect $xyzzy0 $xyzzy1
 
-set ftp0 [new Application/testData]
+set ftp0 [new Application/testFile]
 $ftp0 attach-agent $xyzzy0
+
+set ftp1 [new Application/testFile]
+$ftp1 attach-agent $xyzzy1
 
 # set primary before association starts
 $xyzzy0 set-primary-destination $host1_if0
@@ -128,7 +119,7 @@ $xyzzy0 set-primary-destination $host1_if0
 $ns rtmodel-at 2.0 down $host0_if0
 $ns rtmodel-at 7.0 up $host0_if0
 $ns at 0.5 "$ftp0 start"
-$ns at 10.0 "finish"
+$ns at 1000.0 "finish"
 
 $ns run
 
