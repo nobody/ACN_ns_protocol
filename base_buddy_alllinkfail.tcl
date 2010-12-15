@@ -158,8 +158,8 @@ set ftp2 [new Application/testFile $xyzzy2]
 $xyzzy0 set-primary-destination $host1_if0
 
 # simulate link failure
-$ns rtmodel-at 2.0 down $host0_if0
-$ns rtmodel-at 5.0 down $host0_if1
+#$ns rtmodel-at 2.0 down $host0_if0
+#$ns rtmodel-at 5.0 down $host0_if1
 #$ns rtmodel-at 16.0 up $host0_if1
 #$ns rtmodel-at 18.0 up $host0_if0
 $ns at 0.5 "$ftp0 start"

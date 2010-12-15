@@ -146,28 +146,39 @@ $xyzzy3 add-buddy-destination $xyzzy1 7 0
 
 
 set ftp0 [new Application/testFile $xyzzy0]
-#$ftp0 attach-agent $xyzzy0
+$ftp0 set-input-file-name numbers.txt
 
 set ftp1 [new Application/testFile $xyzzy1]
-#$ftp1 attach-agent $xyzzy1
+$ftp1 set-output-file-name numbers-out1.txt
 
 set ftp2 [new Application/testFile $xyzzy2]
+$ftp2 set-input-file-name numbers.txt
 
+set ftp3 [new Application/testFile $xyzzy3]
+$ftp3 set-output-file-name numbers-out3.txt
 
 # set primary before association starts
 $xyzzy0 set-primary-destination $host1_if0
 
 # simulate node failure
-set KILL_TIME 3.0
+set KILL_TIME 2.0
 $ns rtmodel-at $KILL_TIME down $host0_if0
 $ns rtmodel-at $KILL_TIME down $host0_if1
 $ns rtmodel-at $KILL_TIME down $host0_bif0
 $ns at $KILL_TIME "$ftp0 stop"
+$ns at $KILL_TIME "$xyzzy0 clear"
 
-#set START_TIME 6.0
-#$ns rtmodel-at $START_TIME up $host0_if0
-#$ns rtmodel-at $START_TIME up $host0_if1
-#$ns rtmodel-at $START_TIME up $host0_bif0
+set KILL_TIME2 8.0
+$ns rtmodel-at $KILL_TIME2 down $host2_if0
+$ns rtmodel-at $KILL_TIME2 down $host2_if1
+$ns rtmodel-at $KILL_TIME2 down $host2_bif0
+$ns at $KILL_TIME2 "$ftp2 stop"
+$ns at $KILL_TIME2 "$xyzzy2 clear"
+
+set START_TIME 5.0
+$ns rtmodel-at $START_TIME up $host0_if0
+$ns rtmodel-at $START_TIME up $host0_if1
+$ns rtmodel-at $START_TIME up $host0_bif0
 
 $ns at 0.5 "$ftp0 start"
 $ns at 20.0 "finish"

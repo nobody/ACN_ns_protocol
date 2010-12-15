@@ -260,7 +260,7 @@ class XyzzyAgent : public Agent {
         int rcvNextExpected;
         int rcvHighestReceived;
 
-        void updateRcvWindow(Packet*);
+        bool updateRcvWindow(Packet*);
         void updateSndWindow(Packet*);
 
         //the following 2 functions maintain the ackList

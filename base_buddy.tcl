@@ -141,8 +141,10 @@ $xyzzy1 add-buddy-destination $xyzzy3 15 0
 $xyzzy3 add-buddy-destination $xyzzy1 7 0
 
 
-set ftp0 [new Application/testData]
-$ftp0 attach-agent $xyzzy0
+set ftp0 [new Application/testFile $xyzzy0]
+
+set ftp1 [new Application/testFile $xyzzy1]
+$ftp1 set-output-file-name alice-out1.txt
 
 # set primary before association starts
 $xyzzy0 set-primary-destination $host1_if0
